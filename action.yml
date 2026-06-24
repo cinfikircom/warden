@@ -1,0 +1,55 @@
+name: "Warden Security Audit"
+description: "Warden ile pasif güvenlik & production-readiness denetimi; SARIF üretir (GitHub Code Scanning)."
+author: "Warden"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  target:
+    description: "Denetlenecek proje kökü."
+    required: false
+    default: ${{ github.workspace }}
+  fail-on:
+    description: "Bu şiddet ve üstünde bulgu varsa job başarısız olur (P0|P1|P2|P3). Boş = gate yok."
+    required: false
+    default: ""
+  upload-sarif:
+    description: "findings.sarif'i GitHub Code Scanning'e yükle (true/false)."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Node 22 kur
+      uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+
+    - name: pnpm kur
+      uses: pnpm/action-setup@v4
+      with:
+        version: "9"
+
+    - name: Warden bağımlılıkları
+      shell: bash
+      run: pnpm install --frozen-lockfile
+      working-directory: ${{ github.action_path }}
+
+    - name: Warden denetimi (pasif)
+      shell: bash
+      # Pasif/read-only — aktif test YAPMAZ (yetki kapısı CI'da kapalı). fail-on ile gate.
+      # tsx ile çalışır (workspace .ts'i node_modules üzerinden çözer).
+      run: |
+        pnpm --dir "${{ github.action_path }}" exec tsx \
+          "${{ github.action_path }}/packages/warden-cli/src/index.ts" scan \
+          --target "${{ inputs.target }}" \
+          ${{ inputs.fail-on != '' && format('--fail-on {0}', inputs.fail-on) || '' }}
+
+    - name: SARIF yükle (Code Scanning)
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.target }}/warden-report/findings.sarif
+        category: warden

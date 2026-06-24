@@ -1,0 +1,17 @@
+{
+  "name": "@warden/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Warden komut satırı arayüzü: warden scan | report | pentest.",
+  "bin": {
+    "warden": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@warden/core": "workspace:*"
+  }
+}

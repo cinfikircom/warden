@@ -1,0 +1,10 @@
+{
+  "name": "@warden/skill",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Warden Claude Code Skill köprüsü (SKILL.md + script'ler).",
+  "scripts": {
+    "typecheck": "echo 'skill: typecheck yok (Faz 0)' "
+  }
+}

@@ -1,0 +1,1 @@
+{ "name": "vuln-ai", "dependencies": { "openai": "^4.0.0" } }

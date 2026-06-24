@@ -1,0 +1,18 @@
+# KASITLI volume mismatch: api uploads'ı named volume'a, worker farklı host path'e bağlıyor.
+services:
+  api:
+    image: node:22
+    command: node server.js
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "3000:3000"
+
+  signature-worker:
+    image: node:22
+    command: node worker.js
+    volumes:
+      - ./local-tmp/uploads:/tmp/uploads
+
+volumes:
+  uploads:

@@ -1,0 +1,28 @@
+# Bağımlılıklar
+node_modules/
+.pnpm-store/
+
+# Derleme çıktıları
+dist/
+*.tsbuildinfo
+
+# Warden denetim çıktıları (asla commit'lenmez — secret/kanıt içerebilir)
+warden-report/
+warden-run.log
+
+# Yetki dosyası (yetki kapısı) — kişiye özel, commit'lenmez
+warden.authz.yml
+
+# Editör / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Ortam
+.env
+.env.*
+!.env.example
+
+# Test fixture'ları kasıtlı örnek dosyalar içerir (.env dahil) — izinli
+!**/test/fixtures/**

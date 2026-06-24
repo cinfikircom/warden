@@ -1,0 +1,16 @@
+{
+  "name": "vuln-prisma-docker",
+  "version": "1.0.0",
+  "scripts": {
+    "db:push": "prisma db push",
+    "backup": "pg_dump $DATABASE_URL > backup.sql"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0",
+    "typescript": "^5.5.0"
+  }
+}

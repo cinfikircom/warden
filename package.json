@@ -1,0 +1,23 @@
+{
+  "name": "warden",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Warden — taşınabilir, savunma amaçlı production-readiness & güvenlik denetim aracı (core + cli + Claude skill).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "warden": "tsx packages/warden-cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

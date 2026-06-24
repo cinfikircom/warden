@@ -1,0 +1,17 @@
+{
+  "name": "@warden/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Warden analiz motoru: bulgu modeli, yetki kapısı, modül orkestrasyonu, rapor üretici.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  }
+}

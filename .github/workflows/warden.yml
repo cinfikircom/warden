@@ -1,0 +1,39 @@
+name: Warden Security Audit
+
+# Warden'in KENDİ reposu için örnek workflow. Başka projede kullanmak için: bkz. README "GitHub Action".
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # SARIF upload için gerekli
+
+jobs:
+  warden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - run: pnpm install --frozen-lockfile
+
+      # Kendi reposunu pasif tara; P0 bulguda job'ı düşür.
+      - name: Warden scan (passive)
+        run: pnpm warden scan --target . --fail-on P0
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: warden-report/findings.sarif
+          category: warden

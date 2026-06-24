@@ -1,0 +1,31 @@
+# =============================================================================
+# Warden Yetki Kapısı (Authorization Gate) — ŞABLON
+# =============================================================================
+# Bu dosyayı `warden.authz.yml` olarak kopyalayıp doldurun.
+# AKTİF / DAST testleri YALNIZCA bu dosya varsa VE aşağıdaki alanlar geçerliyse çalışır.
+# Dosya yoksa veya eksikse Warden tamamen PASİF (read-only) koşar.
+#
+# Allow-list dışı hiçbir hedefe aktif istek GÖNDERİLMEZ.
+# DoS / brute-force / exploit / tespit-atlatma ASLA çalıştırılmaz (bkz. README §Güvenlik).
+# =============================================================================
+
+# "Bu varlıklar bana ait ya da test etmeye yetkiliyim" beyanı. Aktif test için ZORUNLU true.
+owner_attestation: false
+
+# Aktif testlerin yapılabileceği TEK host/domain/IP listesi (allow-list).
+# Bu listede olmayan hiçbir hedefe istek gitmez. Boşsa aktif test çalışmaz.
+authorized_targets:
+  - "localhost"
+  - "127.0.0.1"
+  # - "staging.ornek-projem.com"
+
+# Denetim izi: yetkiyi veren kişi/kurum ve tarih (ISO 8601).
+authorized_by: ""        # örn: "Ali Veli <ali@sirket.com>"
+date: ""                 # örn: "2026-06-24"
+
+# (Opsiyonel) Aktif testlerde davranış sınırları. Varsayılanlar non-destructive ve düşük-hacimdir.
+limits:
+  max_requests_per_second: 2   # rate-limit (DoS önler)
+  max_total_requests: 500      # toplam istek tavanı
+  allow_port_scan: false       # hafif port envanteri bile açıkça onay ister
+  allow_default_cred_check: true   # kısa, sabit default-credential listesi denemesi
