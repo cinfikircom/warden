@@ -21,9 +21,9 @@ jobs:
         with:
           node-version: "22"
 
+      # version belirtmiyoruz: pnpm sürümü package.json "packageManager" alanından okunur
+      # (ikisi birlikte verilirse action ERR_PNPM_BAD_PM_VERSION ile düşer).
       - uses: pnpm/action-setup@v4
-        with:
-          version: "9"
 
       - run: pnpm install --frozen-lockfile
 
