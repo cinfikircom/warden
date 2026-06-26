@@ -16,6 +16,13 @@ const IGNORE_DIRS = new Set([
   "warden-report",
 ]);
 
+/**
+ * Nokta ile başlayan dizinler varsayılan olarak atlanır (.vscode/.idea/.cache gürültüsü).
+ * Ama bazıları güvenlik/CI açısından önemli config taşır — bunlara izin ver.
+ * (Örn. D5 CI/CD dedektörü `.github/workflows`'u görebilsin.)
+ */
+const ALLOW_DOT_DIRS = new Set([".github", ".circleci", ".gitlab"]);
+
 /** READ-ONLY dosya bağlamı — dedektörler ve modüller bunu kullanır. */
 export function createFsContext(projectRoot: string): DetectContext {
   const readFile = (relPath: string): string | null => {
@@ -44,7 +51,8 @@ export function createFsContext(projectRoot: string): DetectContext {
         if (out.length >= limit) return;
         const full = join(dir, e.name);
         if (e.isDirectory()) {
-          if (IGNORE_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+          if (IGNORE_DIRS.has(e.name)) continue;
+          if (e.name.startsWith(".") && !ALLOW_DOT_DIRS.has(e.name)) continue;
           walk(full, depth + 1);
         } else if (e.isFile()) {
           const rel = relative(projectRoot, full).split(sep).join("/");
