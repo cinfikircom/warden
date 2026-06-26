@@ -7,6 +7,8 @@ import type { ReportPaths } from "./report/generator.ts";
 import { computeDelta } from "./report/delta.ts";
 import type { PreviousRun, Delta } from "./report/delta.ts";
 import { enrichRisk } from "./risk/score.ts";
+import { loadWaivers, partitionWaived } from "./risk/waiver.ts";
+import type { AppliedWaiver } from "./risk/waiver.ts";
 import { buildAsvsChecklist } from "./risk/asvs.ts";
 import { buildCisChecklist, buildIsoChecklist } from "./risk/standards.ts";
 import type { ScanContext, WardenModule } from "./model/module.ts";
@@ -57,6 +59,8 @@ export interface ScanResult {
   readonly mode: AuthzResult["mode"];
   readonly authz: AuthzResult;
   readonly findings: readonly Finding[];
+  /** `.warden-ignore.yml` ile gerekçeli bastırılan bulgular (rapor/gate dışı, ama izlenir). */
+  readonly waived: readonly AppliedWaiver[];
   readonly ranModules: ReadonlySet<ModuleId>;
   readonly artifacts: ReadonlyMap<ModuleId, unknown>;
   readonly delta: Delta;
@@ -131,10 +135,21 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
 
   // 4) Risk motoru: CVSS v4 + exploitability; ASVS + CIS + ISO checklist'leri.
   const enriched = enrichRisk(findings);
-  const extraChecklists = [buildAsvsChecklist(enriched), buildCisChecklist(enriched), buildIsoChecklist(enriched)];
+
+  // 4b) Waiver: .warden-ignore.yml ile gerekçeli bastırılan bulguları ayır. Süresi
+  //     geçmiş waiver'lar yok sayılır. Bastırılanlar rapor/gate dışı kalır ama log'lanır.
+  const waiverLoad = loadWaivers(opts.projectRoot);
+  for (const w of waiverLoad.warnings) audit.warn(w);
+  const { active, waived } = partitionWaived(enriched, waiverLoad.waivers, startedAt);
+  for (const w of waived) {
+    audit.info(`Waived: ${w.finding.id} (${w.finding.severity}) — gerekçe: ${w.reason}`);
+  }
+  if (waived.length > 0) audit.info(`Toplam ${waived.length} bulgu .warden-ignore.yml ile bastırıldı.`);
+
+  const extraChecklists = [buildAsvsChecklist(active), buildCisChecklist(active), buildIsoChecklist(active)];
 
   // 5) Rapor üret.
-  writeReport(enriched, {
+  writeReport(active, {
     projectRoot: opts.projectRoot,
     mode,
     authz,
@@ -148,6 +163,6 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   });
   audit.info(`Rapor yazıldı: ${paths.dir}`);
 
-  const delta = computeDelta(previous, enriched);
-  return { mode, authz, findings: enriched, ranModules, artifacts, delta, paths, startedAt, finishedAt };
+  const delta = computeDelta(previous, active);
+  return { mode, authz, findings: active, waived, ranModules, artifacts, delta, paths, startedAt, finishedAt };
 }

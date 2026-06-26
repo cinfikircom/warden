@@ -96,6 +96,10 @@ function printSummary(res: ScanResult): void {
     `\nBulgu: toplam ${res.findings.length} ` +
       `(P0:${counts.P0} P1:${counts.P1} P2:${counts.P2} P3:${counts.P3})\n`,
   );
+  if (res.waived.length > 0) {
+    process.stdout.write(`🔕 Waived (.warden-ignore.yml ile bastırıldı): ${res.waived.length}\n`);
+    for (const w of res.waived) process.stdout.write(`  • ${w.finding.id} — ${w.reason}\n`);
+  }
   process.stdout.write(`Çalışan modül: ${res.ranModules.size === 0 ? "yok" : [...res.ranModules].join(", ")}\n`);
   const maxCvss = res.findings.reduce((m, f) => Math.max(m, f.cvss ?? 0), 0);
   if (maxCvss > 0) process.stdout.write(`En yüksek CVSS v4: ${maxCvss.toFixed(1)}\n`);

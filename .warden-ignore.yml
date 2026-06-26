@@ -1,0 +1,21 @@
+# Warden waiver dosyası — gerekçeli bulgu bastırma.
+# Buradaki bulgular RAPORDAN ve CI gate'inden (--fail-on) düşülür; ama sessizce
+# kaybolmaz: her uygulanan waiver audit log'a ve CLI özetine yazılır.
+# Selector'lar (fingerprint / check / id) AND mantığıyla eşleşir; her girdi `reason` ister.
+#
+# NOT: Bu dosya Warden'ın KENDİ reposuna özeldir — tarayıcı kendi tespit-kural
+# kaynağını taradığında çıkan self-match'leri kapatır. Başka projeye taşınmaz.
+
+waivers:
+  # D7, kart verisi (CVV/CVC/PAN) saklama dedektörü. Warden'ın kendi kaynağı bu
+  # anahtar kelimeleri KURAL TANIMI olarak içerir (risk/score.ts CVSS tablosu,
+  # risk/waiver.ts dokümantasyonu, compliance kuralları). Warden bir ödeme
+  # uygulaması değildir; hiçbir yerde gerçek kart verisi saklanmaz.
+  - check: "D7"
+    reason: "Warden'ın kendi PCI tespit kurallarının tanımları — gerçek kart verisi saklama değil."
+
+  # B3, zayıf hash (MD5/SHA1) dedektörü. util/finding.ts'deki SHA1 yalnızca
+  # içerik-türevli kararlı FINGERPRINT (dedup + CI gate eşleştirme) için kullanılır;
+  # parola/imza/oturum gibi güvenlik bağlamında DEĞİL.
+  - fingerprint: "4e78860aa998bea8"
+    reason: "SHA1 yalnızca fingerprintOf() içerik özeti için; güvenlik amaçlı hash değil."

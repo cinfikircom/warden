@@ -125,6 +125,22 @@ jobs:
 
 Local equivalent of the gate: `warden scan --fail-on P0` (exit code 1 on P0+).
 
+### Suppressing false positives (`.warden-ignore.yml`)
+
+False positives can be waived with a justification in a `.warden-ignore.yml` at the project root.
+Waived findings are dropped from the report **and** the `--fail-on` gate, but never hidden silently:
+each applied waiver is written to the audit log and the CLI summary. Selectors (`fingerprint` /
+`check` / `id`) match with AND semantics, and every entry requires a `reason`:
+
+```yaml
+waivers:
+  - fingerprint: "a1b2c3d4e5f6..."   # most stable; binds to a finding's content hash
+    reason: "Reviewed — intentional, not a real issue."
+  - check: "B3"                       # broader; all B3 findings
+    reason: "SHA1 used only for content fingerprinting, not security."
+    expires: "2026-12-31"             # optional; past this date the waiver is inactive
+```
+
 ## Supported stacks
 
 **Languages/frameworks:** Node/TypeScript (Prisma, Drizzle, Express, Next, NestJS), Python/Django, PHP/Laravel, .NET/ASP.NET (EF Core), Go.
@@ -133,7 +149,7 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 116 tests passing; 10 vulnerable‑by‑design fixtures. See [`docs/CHECKS.md`](docs/CHECKS.md)
+Actively developed. 131 tests passing; 10 vulnerable‑by‑design fixtures. See [`docs/CHECKS.md`](docs/CHECKS.md)
 for the full, per‑check status catalog.
 
 ## License
