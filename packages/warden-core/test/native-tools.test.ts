@@ -59,4 +59,19 @@ describe("araç kayıtları tutarlı", () => {
     expect(ACTIVE_TOOLS.every((t) => t.active)).toBe(true);
     expect(ACTIVE_TOOLS.map((t) => t.id)).toContain("nuclei");
   });
+  // Gerçek-CLI sözleşmesi (canlı entegrasyonla doğrulandı) — regresyon kilidi.
+  it("gitleaks ≥8.19 CLI: `dir` + stdout `-` (eski `detect`/`/dev/stdout` DEĞİL)", () => {
+    const gl = PASSIVE_TOOLS.find((t) => t.id === "gitleaks")!;
+    const args = gl.args({ root: "." });
+    expect(args[0]).toBe("dir");
+    expect(args).not.toContain("detect");
+    expect(args).not.toContain("/dev/stdout");
+    expect(args).toContain("-"); // --report-path -
+  });
+  it("trivy fs SARIF + misconfig/vuln/secret tarayıcıları", () => {
+    const tv = PASSIVE_TOOLS.find((t) => t.id === "trivy")!;
+    const args = tv.args({ root: "." });
+    expect(args).toContain("sarif");
+    expect(args.join(" ")).toContain("vuln,secret,misconfig");
+  });
 });

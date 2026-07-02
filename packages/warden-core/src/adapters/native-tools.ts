@@ -90,15 +90,16 @@ export const PASSIVE_TOOLS: readonly NativeToolSpec[] = [
   {
     id: "trivy",
     bin: "trivy",
-    title: "Trivy (SCA + IaC)",
-    args: () => ["fs", "--format", "sarif", "--quiet", "."],
+    title: "Trivy (SCA + IaC + secret)",
+    args: () => ["fs", "--format", "sarif", "--quiet", "--scanners", "vuln,secret,misconfig", "."],
     parse: (out) => sarifToFindings(out, { sourceLabel: "trivy" }),
   },
   {
     id: "gitleaks",
     bin: "gitleaks",
-    title: "Gitleaks (secret + git history)",
-    args: () => ["detect", "--report-format", "sarif", "--report-path", "/dev/stdout", "--no-banner", "--redact"],
+    title: "Gitleaks (secret)",
+    // gitleaks ≥8.19: `detect` kaldırıldı → `dir` (çalışma ağacı) / `git` (geçmiş). stdout: -r -
+    args: () => ["dir", ".", "--report-format", "sarif", "--report-path", "-", "--no-banner", "--redact"],
     parse: (out) => sarifToFindings(out, { module: "B" }),
   },
   {
