@@ -12,6 +12,8 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   // AWS access key id
   /\bAKIA[0-9A-Z]{16}\b/g,
+  // Sağlayıcı token'ları (Stripe/Google/GitHub/GitLab/npm/SendGrid/Twilio/Slack/OpenAI/Anthropic)
+  /\b(sk_live_[0-9A-Za-z]{10,}|rk_live_[0-9A-Za-z]{10,}|AIza[0-9A-Za-z_\-]{35}|ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{22,}|glpat-[0-9A-Za-z_\-]{20}|npm_[0-9A-Za-z]{36}|SG\.[\w\-]{22}\.[\w\-]{43}|SK[0-9a-fA-F]{32}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-ant-[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9]{32,})\b/g,
   // Genel uzun base64/hex sırrı
   /\b[A-Fa-f0-9]{32,}\b/g,
   // Bağlantı dizesi içindeki parola: scheme://user:pass@host
@@ -40,8 +42,9 @@ export function maskSecrets(text: string): string {
     /([A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|auth|bearer|session)[A-Za-z0-9_]*)(\s*[:=]\s*["']?)([^\s"']{4,})/gi,
     (_m, key: string, sep: string, val: string) => `${key}${sep}${maskValue(val)}`,
   );
-  // tek-başına token'lar (JWT, AKIA, uzun hex)
-  for (const re of [SECRET_PATTERNS[1], SECRET_PATTERNS[2], SECRET_PATTERNS[3]]) {
+  // tek-başına token'lar (JWT, AKIA, sağlayıcı token'ları, uzun hex).
+  // Not: index 0 (key=value) ve son index (bağlantı dizesi) ayrı ele alınır.
+  for (const re of [SECRET_PATTERNS[1], SECRET_PATTERNS[2], SECRET_PATTERNS[3], SECRET_PATTERNS[4]]) {
     if (!re) continue;
     out = out.replace(re, (m: string) => maskValue(m));
   }

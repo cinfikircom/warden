@@ -3,6 +3,7 @@ import type { Finding } from "../../model/finding.ts";
 import { scanSource } from "./scanner.ts";
 import { SAST_RULES } from "./rules.ts";
 import { collectAuditFindings } from "./dependency.ts";
+import { collectGitHistorySecrets } from "./git-history.ts";
 import { makeFinding } from "../../util/finding.ts";
 import { looksLikeSecret } from "../../secret/mask.ts";
 
@@ -50,6 +51,11 @@ export const sastModule: WardenModule = {
     const dep = collectAuditFindings(ctx.projectRoot, ctx.fs, ctx.audit);
     findings.push(...dep.findings);
     if (!dep.ran) ctx.audit.info("B2 dependency audit atlandı (lockfile yok ya da ağ erişimi yok).");
+
+    // B1 git geçmişi secret taraması (read-only, .git varsa).
+    const gitSecrets = collectGitHistorySecrets(ctx.projectRoot, ctx.fs, ctx.audit);
+    findings.push(...gitSecrets.findings);
+    if (gitSecrets.ran) ctx.audit.info(`B1 git geçmişi: ${gitSecrets.findings.length} tarihsel secret bulgusu.`);
 
     ctx.audit.info(`SAST: ${findings.length} bulgu (kural seti + ${dep.ran ? "audit" : "audit yok"}).`);
     return { findings };

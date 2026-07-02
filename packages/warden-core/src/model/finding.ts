@@ -75,4 +75,16 @@ export interface Finding {
   readonly cvss?: number;
   /** Sömürülebilirlik (risk motoru): ne kadar kolay/uzaktan sömürülür. */
   readonly exploitability?: "high" | "medium" | "low";
+  /** CISA KEV: bilinen-sömürülen zafiyet listesinde mi (varsa risk motoru işaretler). */
+  readonly kev?: boolean;
+  /** EPSS: 30 gün içinde vahşi-doğada sömürülme olasılığı (0–1), varsa. */
+  readonly epss?: number;
+  /** İlişkili CVE tanımlayıcıları (KEV/EPSS eşleştirmesi + bağımlılık/import bulguları için). */
+  readonly cves?: readonly string[];
+  /**
+   * Erişilebilirlik (reachability): zafiyetli bağımlılık kaynak kodun içe-aktarım grafında mı.
+   * true=doğrudan import ediliyor (öncelik yüksek), false=grafikte yok (öncelik düşük), undefined=bilinmiyor.
+   * NOT: import-seviyesi heuristik; tam çağrı-grafı analizi değil.
+   */
+  readonly reachable?: boolean;
 }

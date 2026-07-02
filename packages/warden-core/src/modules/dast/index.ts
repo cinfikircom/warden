@@ -7,6 +7,7 @@ import { analyzeSecurityHeaders, analyzeCookies } from "./headers.ts";
 import { collectTls, analyzeTls } from "./tls.ts";
 import { ADMIN_PATHS, analyzeAdminExposure, analyzeRateLimit } from "./active-checks.ts";
 import { scanPorts } from "./ports.ts";
+import { ACTIVE_TOOLS, runNativeTool, enabledTools } from "../../adapters/native-tools.ts";
 
 const LOOPBACK = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)$/i;
 
@@ -101,6 +102,21 @@ export function makeDastModule(fetchImpl?: FetchLike): WardenModule {
           findings.push(...(await scanPorts(host, ctx.audit)));
         } else {
           ctx.audit.info("C5 port taraması atlandı: allow_port_scan kapalı.");
+        }
+      }
+
+      // Opsiyonel native DAST: nuclei (yetki kapılı + WARDEN_TOOLS=nuclei/all-active). Yalnızca
+      // yetkili hedeflere, non-destructive template etiketleriyle (dos/fuzz/intrusive hariç).
+      const tools = enabledTools();
+      const nucleiOn = tools === "all" ? false : tools.has("nuclei"); // aktif araç explicit istenmeli
+      if (nucleiOn) {
+        const bases = ctx.authz.authorizedTargets.map(targetToBaseUrl);
+        for (const spec of ACTIVE_TOOLS) {
+          const res = runNativeTool(spec, { root: ctx.projectRoot, targets: bases }, ctx.audit);
+          if (res.ran) {
+            ctx.audit.info(`${spec.title}: ${res.findings.length} bulgu (yetkili hedefler).`);
+            findings.push(...res.findings);
+          }
         }
       }
 

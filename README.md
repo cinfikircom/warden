@@ -6,7 +6,7 @@
 > **missing / broken / risky** ranked by severity with **evidence**, and emits a copy‑paste
 > **Claude Code remediation playbook** for every P0/P1 finding.
 
-[![tests](https://img.shields.io/badge/tests-116%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-201%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -41,7 +41,8 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 ## What it does
 
 - **Module A — Parity & Deployment** (passive): git drift, destructive migrations (Prisma/Django/Laravel/EF Core/Go), runtime freshness, **generic volume‑parity engine**, `.env` ↔ `.env.example`, backup/restore + TLS expiry, external webhooks.
-- **Module B — SAST** (passive): hardcoded secrets, vulnerable dependencies (`npm/pnpm audit`), weak crypto (MD5/SHA1/ECB/CryptoJS), JWT‑in‑localStorage, IDOR, SQL/command/eval injection, CORS, frontend XSS sinks — across **TS/JS, Python, PHP, C#, Go**.
+- **Module B — SAST** (passive): hardcoded secrets (+ provider keys & **entropy‑based** detection + **git‑history** scan), vulnerable dependencies (`npm/pnpm audit`), weak crypto (MD5/SHA1/ECB/CryptoJS), JWT‑in‑localStorage & **`alg:none`**, IDOR, SQL/command/eval injection, **SSRF · SSTI · path traversal · insecure deserialization · XXE · open redirect**, CORS, frontend XSS sinks + **weak CSP / prod source‑maps** — across **TS/JS, Python, PHP, C#, Go**.
+- **Module Imports — external‑tool orchestrator** (passive): ingests any **SARIF 2.1.0** report (OpenGrep/Semgrep, Trivy, Gitleaks, Checkov, Nuclei) and **OSV‑Scanner** JSON from `warden-imports/`, normalizing them into Warden's finding model (auto‑routing each to the right dimension — IaC→CLOUD, K8s→K8S, DAST→C) so fingerprint/delta, scoring, playbook, waivers and SARIF re‑export apply to them too. With `WARDEN_TOOLS=all` (or a comma‑list) Warden **runs the installed engines directly** (OpenGrep/Semgrep/Trivy/Gitleaks/Checkov; `osv-scanner` live SCA), and gate‑restricted **Nuclei** for DAST — each skipped gracefully if absent.
 - **Module D — Compliance** (passive): observability, secret management, CI/CD, data protection, plus **PCI‑DSS 4.0** (CVV/PAN scanning + checklist) and **Privacy / GDPR‑KVKK** checklist.
 - **Module CLOUD** (passive, Terraform): public S3/GCS, IAM wildcards, open security groups/firewalls, public RDS/Cloud SQL, Azure public storage, Cloudflare SSL mode.
 - **Module K8S** (passive): privileged/root containers, `:latest` images, plaintext secret env, ingress without TLS.
@@ -50,6 +51,9 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 
 Every finding carries a **CVSS v4** base score + exploitability, standard mappings
 (**OWASP Top 10 / ASVS / API / CIS Benchmark / ISO 27001:2022**), evidence (`file:line` or command), and a remediation prompt.
+Findings that carry a CVE are additionally prioritized with **CISA KEV** (known‑exploited) and **EPSS** (30‑day exploit probability),
+loaded **offline** from optional `warden-data/kev.json` / `warden-data/epss.json` snapshots (no network — passive by default),
+and with **import‑level reachability** — a dependency that isn't in the source import graph (likely transitive) is de‑prioritized (unless it's KEV).
 
 ## Architecture
 
@@ -149,8 +153,8 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 131 tests passing; 10 vulnerable‑by‑design fixtures. See [`docs/CHECKS.md`](docs/CHECKS.md)
-for the full, per‑check status catalog.
+Actively developed. 201 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 ## License
 

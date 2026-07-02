@@ -40,11 +40,13 @@ export function buildScoreboard(findings: readonly Finding[], ranModules: Readon
   const rows: ScoreRow[] = [];
   for (const module of Object.keys(DIMENSIONS) as ModuleId[]) {
     const dimension = DIMENSIONS[module];
-    if (!ranModules.has(module)) {
+    const own = findings.filter((f) => f.module === module);
+    // Boyut, modülü çalıştıysa VEYA o boyuta ait bulgu varsa değerlendirilir (ör. içe-aktarılan
+    // DAST/IaC bulguları kendi boyutunda; SAST'ın ürettiği FE bulguları FE boyutunda).
+    if (!ranModules.has(module) && own.length === 0) {
       rows.push({ module, dimension, score: null, findings: 0, p0: 0, p1: 0 });
       continue;
     }
-    const own = findings.filter((f) => f.module === module);
     let score = 10;
     let p0 = 0;
     let p1 = 0;
