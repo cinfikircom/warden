@@ -74,4 +74,9 @@ describe("araç kayıtları tutarlı", () => {
     expect(args).toContain("sarif");
     expect(args.join(" ")).toContain("vuln,secret,misconfig");
   });
+  it("checkov dosya-tabanlı runOverride kullanır (stdout'a akıtmaz, read-only)", () => {
+    const ck = PASSIVE_TOOLS.find((t) => t.id === "checkov")!;
+    expect(typeof ck.runOverride).toBe("function");
+    expect(ck.args({ root: "." })).toEqual([]); // args kullanılmaz
+  });
 });

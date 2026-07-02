@@ -123,9 +123,21 @@ export function collectGitHistorySecrets(
   const maxBytes = opts.maxBytes ?? 8_000_000;
   try {
     audit?.command(`git log -p -n ${maxCommits} (secret taraması)`, root);
+    // Test/fixture/spec yollarını hariç tut (SAST tarayıcısının SKIP_PATH'iyle tutarlı):
+    // bu dosyalardaki sahte/örnek anahtarlar gerçek sızıntı değildir (gürültü önleme).
+    const excludes = [
+      ":(exclude,glob)**/*.test.*",
+      ":(exclude,glob)**/*.spec.*",
+      ":(exclude,glob)**/test/**",
+      ":(exclude,glob)**/tests/**",
+      ":(exclude,glob)**/__tests__/**",
+      ":(exclude,glob)**/fixtures/**",
+      ":(exclude,glob)**/node_modules/**",
+      ":(exclude,glob)**/vendor/**",
+    ];
     const out = execFileSync(
       "git",
-      ["log", "-p", "--no-color", "--no-merges", "-n", String(maxCommits), "--", "."],
+      ["log", "-p", "--no-color", "--no-merges", "-n", String(maxCommits), "--", ".", ...excludes],
       { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 60_000, maxBuffer: maxBytes },
     );
     return { findings: historyHitsToFindings(scanDiffForSecrets(out)), ran: true };

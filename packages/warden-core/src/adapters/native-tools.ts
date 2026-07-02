@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Finding, ModuleId } from "../model/finding.ts";
 import type { Severity } from "../model/severity.ts";
 import type { AuditLog } from "../audit/log.ts";
@@ -25,6 +28,11 @@ export interface NativeToolSpec {
   readonly args: (ctx: NativeToolContext) => string[];
   /** stdout → Finding[]. */
   readonly parse: (stdout: string) => Finding[];
+  /**
+   * stdout'a akıtmayan araçlar için özel runner (ör. checkov SARIF'i dosyaya yazar).
+   * Verilirse args/parse yerine bu kullanılır. Hedefe YAZMAMALI (read-only ilke).
+   */
+  readonly runOverride?: (ctx: NativeToolContext, audit?: AuditLog) => { findings: Finding[]; ran: boolean };
 }
 
 export interface NativeToolContext {
@@ -106,8 +114,33 @@ export const PASSIVE_TOOLS: readonly NativeToolSpec[] = [
     id: "checkov",
     bin: "checkov",
     title: "Checkov (IaC misconfig)",
-    args: () => ["-d", ".", "-o", "sarif", "--compact", "--quiet"],
+    // checkov ≥3 SARIF'i stdout'a değil dosyaya yazar → hedef-DIŞI geçici dizine yönlendir (read-only).
+    args: () => [],
     parse: (out) => sarifToFindings(out, { module: "CLOUD" }),
+    runOverride: (ctx, audit) => {
+      let dir: string | null = null;
+      try {
+        dir = mkdtempSync(join(tmpdir(), "warden-checkov-"));
+        const args = ["-d", ctx.root, "-o", "sarif", "--output-file-path", dir, "--quiet"];
+        audit?.command(`checkov ${args.join(" ")}`, ctx.root);
+        try {
+          execFileSync("checkov", args, { encoding: "utf8", stdio: ["ignore", "ignore", "ignore"], timeout: 180_000 });
+        } catch {
+          // checkov bulgu bulunca non-zero çıkar ama dosyayı yine yazar.
+        }
+        const sarif = readFileSync(join(dir, "results_sarif.sarif"), "utf8");
+        return { findings: sarifToFindings(sarif, { module: "CLOUD" }), ran: true };
+      } catch {
+        audit?.info("checkov kurulu değil/çalışmadı — atlandı (opsiyonel).");
+        return { findings: [], ran: false };
+      } finally {
+        if (dir) try {
+          rmSync(dir, { recursive: true, force: true });
+        } catch {
+          /* temizlik best-effort */
+        }
+      }
+    },
   },
 ];
 
@@ -147,6 +180,7 @@ function isEnabled(spec: NativeToolSpec, enabled: "all" | Set<string>): boolean 
 
 /** Tek bir native aracı best-effort çalıştırır. Binary yoksa/hata olursa graceful boş döner. */
 export function runNativeTool(spec: NativeToolSpec, ctx: NativeToolContext, audit?: AuditLog): { findings: Finding[]; ran: boolean } {
+  if (spec.runOverride) return spec.runOverride(ctx, audit);
   try {
     const args = spec.args(ctx);
     audit?.command(`${spec.bin} ${args.join(" ")}`, ctx.root);

@@ -6,7 +6,7 @@
 > **missing / broken / risky** ranked by severity with **evidence**, and emits a copy‑paste
 > **Claude Code remediation playbook** for every P0/P1 finding.
 
-[![tests](https://img.shields.io/badge/tests-203%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -153,7 +153,7 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 203 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+Actively developed. 204 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
 See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 ## License
