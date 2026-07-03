@@ -348,10 +348,18 @@ export function mountSecurityKnight(target, options = {}){
       </div>
 
       <div class="sk-sect">🛡️ Kuşanılan Güçler</div>
-      <div class="sk-grid">
-        ${state.layers.map(l => abilityCard(l, false)).join("")}
-        ${state.relics.map(l => abilityCard(l, true)).join("")}
-      </div>
+      ${(() => {
+        const groups = {};
+        for (const l of state.layers){ const g = l.group || ""; (groups[g] ||= []).push(l); }
+        const keys = Object.keys(groups);
+        const relicsHtml = state.relics.length
+          ? `<div class="sk-group">✨ Kalıntılar</div><div class="sk-grid">${state.relics.map(l => abilityCard(l, true)).join("")}</div>` : "";
+        if (keys.length <= 1)
+          return `<div class="sk-grid">${state.layers.map(l => abilityCard(l, false)).join("")}</div>${relicsHtml}`;
+        return keys.map(g =>
+          `${g ? `<div class="sk-group">${g}</div>` : ""}<div class="sk-grid">${groups[g].map(l => abilityCard(l, false)).join("")}</div>`
+        ).join("") + relicsHtml;
+      })()}
 
       <div class="sk-sect">📜 Savaş Günlüğü <span class="sk-muted">— son 24 saat</span></div>
       <div class="sk-stats">

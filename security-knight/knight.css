@@ -74,6 +74,8 @@
 
 /* --- yetenek ızgarası --- */
 .sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.sk-group{font-weight:700;font-size:13px;color:var(--gold2);margin:16px 2px 8px;display:flex;align-items:center;gap:6px}
+.sk-group:first-of-type{margin-top:2px}
 .sk-ability{padding:13px 14px;display:flex;gap:11px;align-items:flex-start}
 .sk-ic{width:42px;height:42px;flex:0 0 auto;border-radius:11px;display:grid;place-items:center;font-size:22px;border:1px solid var(--line)}
 .sk-nm{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}

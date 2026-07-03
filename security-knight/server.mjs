@@ -108,6 +108,24 @@ const server = createServer(async (req, res) => {
       try { return json(res, 200, JSON.parse(await readFile(WARDEN_POSTURE_FILE, "utf8"))); }
       catch { return json(res, 200, { statuses:{}, verification:{results:{}}, metrics:{}, note:"warden-bridge.mjs koşulmadı" }); }
     }
+    // Phase 3: combined posture — runtime bot-defense + Warden code-scan in one knight.
+    if (path === "/api/combined/posture"){
+      const botVer = await readVerification();
+      let warden = { statuses:{}, verification:{results:{}}, metrics:{} };
+      try { warden = JSON.parse(await readFile(WARDEN_POSTURE_FILE, "utf8")); } catch {}
+      const bm = posture.metrics || {}, wm = warden.metrics || {};
+      return json(res, 200, {
+        statuses: { ...(posture.statuses||{}), ...(warden.statuses||{}) },
+        verification: { results: { ...(botVer.results||{}), ...(warden.verification?.results||{}) } },
+        metrics: {
+          "Püskürtülen saldırı": bm["Püskürtülen saldırı"] ?? "–",
+          "Kod bulgusu": wm["Findings"] ?? "–",
+          "Kod P1": wm["P1"] ?? "–",
+          "Dostu vurma": bm["Dostu vurma"] ?? 0,
+          breakdown: { ...(bm.breakdown||{}), ...(wm.breakdown||{}) },
+        },
+      });
+    }
     if (path === "/api/security/metrics") return json(res, 200, posture.metrics || {});
     if (path === "/api/security/jobs"){
       let jobs = [];
