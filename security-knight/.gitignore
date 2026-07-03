@@ -1,0 +1,12 @@
+# Runtime / generated (not committed)
+state/jobs.jsonl
+state/audit.log
+state/attack-results.json
+*.log
+
+# Secrets & local config
+.env
+attack.config.json
+
+# Committed on purpose (demo seeds, no secrets):
+#   state/posture.json · state/verification.json · state/selfcheck.json

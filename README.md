@@ -1,16 +1,34 @@
-# Warden
+# ⚔️ Warden
 
-> **Portable, defensive production-readiness & security audit tool.**
-> Point it at any project — Warden statically analyzes the code, config, dependencies and IaC
-> (and, *only with explicit authorization*, the running environment), lists everything
-> **missing / broken / risky** ranked by severity with **evidence**, and emits a copy‑paste
-> **Claude Code remediation playbook** for every P0/P1 finding.
+> **A defensive security platform — scan your code, then prove your defenses hold.**
+> Two parts, one guardian: **Warden Scan** finds everything *missing / broken / risky* in any
+> project, and **Warden Knight** turns your live defenses into a gamified knight that arms up
+> the more you harden it.
 
 [![tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
-🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Full check catalog](docs/CHECKS.md)
+🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Check catalog](docs/CHECKS.md) · ⚔️ [Warden Knight dashboard](security-knight/README.md)
+
+---
+
+## Two parts, one guardian
+
+**Scan → fix → arm up → prove.** The scanner finds weaknesses; the Knight proves your defenses
+actually hold and makes hardening feel like leveling up a character.
+
+| | 🛡️ **Warden Scan** _(engine, this repo root)_ | ⚔️ **Warden Knight** _([`security-knight/`](security-knight/README.md))_ |
+|---|---|---|
+| **What** | Static + dynamic security audit of any codebase | Live, gamified posture dashboard for one app's defenses |
+| **Answers** | “What’s broken or risky in this code?” | “Are my defenses actually holding — and how strong?” |
+| **Form** | CLI / CI scanner → findings, SARIF, playbooks | Web panel + backend + bot‑attack harness |
+| **Loop** | scan → remediation playbook → re‑scan (before/after delta) | equip → prove (attack test) → level up |
+
+<div align="center"><img src="security-knight/assets/knight-lv6.png" width="190" alt="Warden Knight"/></div>
+
+> The two share one DNA — evidence‑based (measured, not claimed), authorization‑gated active
+> testing, and a remediation loop. Scan tells you what to fix; the Knight proves it stayed fixed.
 
 ---
 
@@ -38,7 +56,7 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 
 ---
 
-## What it does
+## 🛡️ Warden Scan — what it does
 
 - **Module A — Parity & Deployment** (passive): git drift, destructive migrations (Prisma/Django/Laravel/EF Core/Go), runtime freshness, **generic volume‑parity engine**, `.env` ↔ `.env.example`, backup/restore + TLS expiry, external webhooks.
 - **Module B — SAST** (passive): hardcoded secrets (+ provider keys & **entropy‑based** detection + **git‑history** scan), vulnerable dependencies (`npm/pnpm audit`), weak crypto (MD5/SHA1/ECB/CryptoJS), JWT‑in‑localStorage & **`alg:none`**, IDOR, SQL/command/eval injection, **SSRF · SSTI · path traversal · insecure deserialization · XXE · open redirect**, CORS, frontend XSS sinks + **weak CSP / prod source‑maps** — across **TS/JS, Python, PHP, C#, Go**.
