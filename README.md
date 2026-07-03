@@ -30,6 +30,14 @@ actually hold and makes hardening feel like leveling up a character.
 > The two share one DNA — evidence‑based (measured, not claimed), authorization‑gated active
 > testing, and a remediation loop. Scan tells you what to fix; the Knight proves it stayed fixed.
 
+### The Warden Knight dashboard
+
+Your complete security posture — runtime bot‑defense **and** the whole Warden code scan — as one
+knight that arms up as you harden. Verified armor is solid; **unproven armor is a translucent
+“ghost”**; a broken defense **drops** with an alarm. Measured score (not claimed), grouped by domain.
+
+<div align="center"><img src="security-knight/assets/panel-combined.png" width="760" alt="Warden Knight dashboard — combined posture"/></div>
+
 ---
 
 ## ⛔ READ FIRST — Security & Authorization Principles (binding)

@@ -35,6 +35,8 @@ and fires an alarm. Fixing a weakness is a **quest** with copy-paste steps.
 
 > It can’t show a green tick it hasn’t earned.
 
+<div align="center"><img src="assets/panel-combined.png" width="800" alt="Security Knight dashboard"/></div>
+
 ## The knight grows as you harden
 
 The character is generated art (via Magnific / Nano Banana Pro) — one consistent hero across a
