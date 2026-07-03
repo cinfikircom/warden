@@ -57,6 +57,20 @@ The character is generated art (via Magnific / Nano Banana Pro) — one consiste
 - 🧩 **Framework-agnostic & zero-dependency** — drop the ES-module widget into any app; Next.js routes included.
 - ✅ **CI regression guard** — a verified defense can never silently regress; CI fails if armor drops.
 
+## Two profiles — one knight
+
+The same knight can visualize different postures:
+
+- **Bot-defense** (`index.html`) — honeypot, signed timestamps, rate-limits, silent handling…
+- **Whole Warden scan** (`index-warden.html`) — each **scan dimension** (SAST, Cloud, Compliance,
+  K8s, DAST…) becomes armor. Feed it with:
+  ```bash
+  pnpm warden scan --target <project>            # produces warden-report/findings.json
+  node warden-bridge.mjs --file ../warden-report/findings.json   # → state/warden-posture.json
+  ```
+  A dimension Warden scanned clean → **solid, verified** armor; a P0 dimension → an **open** quest.
+  This is the bridge that makes _Warden Scan_ and _Warden Knight_ speak the same language.
+
 ## Quick start
 
 ```bash

@@ -2,6 +2,7 @@
 state/jobs.jsonl
 state/audit.log
 state/attack-results.json
+state/warden-posture.json
 *.log
 
 # Secrets & local config

@@ -22,6 +22,7 @@ import { dirname, join, normalize, extname } from "node:path";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const STATE = join(ROOT, "state");
 const POSTURE_FILE = join(STATE, "posture.json");
+const WARDEN_POSTURE_FILE = join(STATE, "warden-posture.json"); // Phase 2: Warden scan → Knight
 const VERIFICATION_FILE = join(STATE, "verification.json");
 const JOBS_FILE = join(STATE, "jobs.jsonl");
 const AUDIT_FILE = join(STATE, "audit.log");
@@ -102,6 +103,11 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ...posture, verification: await readVerification() });
     }
     if (path === "/api/security/verification") return json(res, 200, await readVerification());
+    // Phase 2: Warden Scan → Knight posture (whole-codebase security as armor).
+    if (path === "/api/warden/posture"){
+      try { return json(res, 200, JSON.parse(await readFile(WARDEN_POSTURE_FILE, "utf8"))); }
+      catch { return json(res, 200, { statuses:{}, verification:{results:{}}, metrics:{}, note:"warden-bridge.mjs koşulmadı" }); }
+    }
     if (path === "/api/security/metrics") return json(res, 200, posture.metrics || {});
     if (path === "/api/security/jobs"){
       let jobs = [];
