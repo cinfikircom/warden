@@ -18,6 +18,8 @@ export interface FindingInput {
   readonly autoFixable: boolean;
   readonly references?: readonly string[];
   readonly cvss?: number;
+  readonly cves?: readonly string[];
+  readonly reachable?: boolean;
 }
 
 /** İçerik-türevli kararlı fingerprint (çalıştırmalar arası dedup + CI gate). */

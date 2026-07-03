@@ -1,0 +1,32 @@
+{
+  "_comment": "Zırh durumunun GERÇEK kaynağı. Ajan bir düzeltmeyi tamamlayınca ilgili anahtarı 'active' yapar; panel bunu okuyup şövalyeyi günceller.",
+  "statuses": {
+    "honeypot": "active",
+    "hmac": "active",
+    "token1x": "open",
+    "rlip": "active",
+    "rlmail": "active",
+    "rlverify": "active",
+    "silent": "active",
+    "consttime": "open",
+    "observ": "open",
+    "enum": "partial",
+    "globalcap": "optional",
+    "challenge": "optional",
+    "fairscale": "optional",
+    "a11y": "optional"
+  },
+  "metrics": {
+    "Püskürtülen saldırı": 348,
+    "Korunan istek": 1240,
+    "Ulaşan elçi (e-posta)": 892,
+    "Aktif tehdit": "Yok",
+    "Dostu vurma": 0,
+    "breakdown": {
+      "Tuzağa düşen": 210,
+      "Çok hızlı (<1,5sn)": 96,
+      "Replay / eski damga": 25,
+      "Rate-limit reddi": 17
+    }
+  }
+}

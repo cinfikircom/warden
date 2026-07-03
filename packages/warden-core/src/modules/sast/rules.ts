@@ -1,4 +1,5 @@
 import type { SourceRule } from "./scanner.ts";
+import { looksHighEntropySecret } from "../../util/entropy.ts";
 
 /**
  * SAST kural seti (Faz 2). Modül B + Frontend (FE) statik kuralları; her kural OWASP/ASVS'e eşli
@@ -307,5 +308,183 @@ export const SAST_RULES: readonly SourceRule[] = [
     impact: "v-html sanitize edilmemiş HTML render eder; DOM-XSS.",
     recommendation: "DOMPurify ile sanitize et veya metin binding kullan.",
     references: ["OWASP A03:2021"], effort: "S",
+  },
+
+  // ===================================================================================
+  // KAPSAM GENİŞLETME (2026): B1 ek token'lar · entropi · SSRF · SSTI · path traversal ·
+  // güvensiz deserialization · XXE · open redirect · JWT alg=none · CSP · source map.
+  // ===================================================================================
+
+  // ---- B1 Ek sağlayıcı token'ları (yüksek güven, belirgin ön-ek) ---------
+  {
+    id: "B1-provider-token", check: "B1", module: "B", title: "Hardcoded sağlayıcı anahtarı (Stripe/Google/GitLab/npm/SendGrid/Twilio)",
+    severity: "P0", category: "Secret", confidence: "high",
+    pattern:
+      /\b(sk_live_[0-9A-Za-z]{16,}|rk_live_[0-9A-Za-z]{16,}|AIza[0-9A-Za-z_\-]{35}|glpat-[0-9A-Za-z_\-]{20}|npm_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{22,}|SG\.[\w\-]{22}\.[\w\-]{43}|SK[0-9a-fA-F]{32})\b/,
+    pathExclude: /\.(md|txt)$/i,
+    impact: "Canlı üçüncü-taraf servis anahtarı kodda; ödeme/e-posta/repo erişimi ele geçirilebilir.",
+    recommendation: "Anahtarı hemen iptal/rotasyon yap; secret manager'a taşı; git geçmişini temizle.",
+    references: ["OWASP A07:2021", "ASVS 6.4"], effort: "M",
+  },
+  {
+    id: "B1-high-entropy-secret", check: "B1", module: "B", title: "Yüksek-entropili sabit secret (rastgele token'a benziyor)",
+    severity: "P1", category: "Secret", confidence: "medium",
+    // Desen ucuz bir ön-filtredir; asıl karar entropi doğrulayıcısında verilir (FP düşük).
+    pattern: /['"`][^'"`\s]{20,}['"`]/,
+    validate: (line) => looksHighEntropySecret(line),
+    pathExclude: /\.(md|txt|lock|snap)$|lock\.(json|yaml)$/i,
+    impact: "Secret-benzeri anahtara atanmış yüksek-entropili sabit değer; sızmış bir sır olabilir.",
+    recommendation: "Değeri env/secret manager'dan oku; koddan kaldır; gerçek secret ise rotasyon yap.",
+    references: ["OWASP A07:2021"], effort: "S", maxPerFile: 5,
+  },
+
+  // ---- SSRF (OWASP A10) --------------------------------------------------
+  {
+    id: "B6-ssrf-node", check: "E10", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
+    severity: "P1", category: "SSRF", confidence: "low",
+    pattern: /\b(axios|fetch|got|superagent|http|https)\s*(\.\w+)?\s*\(\s*[`'"]?[^)]*(req\.(params|query|body)|ctx\.(request|query|params))/i,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "İstek hedefi kullanıcı girdisiyle belirleniyor; iç ağ/metadata servisine (169.254.169.254) erişim mümkün.",
+    recommendation: "Hedef host'u allow-list ile doğrula; şema/IP aralığını kısıtla; DNS-rebinding'e karşı çözümlenmiş IP'yi denetle.",
+    references: ["OWASP A10:2021", "ASVS 12.6"], effort: "M",
+  },
+  {
+    id: "B6-ssrf-py", check: "E10", module: "B", title: "SSRF adayı: requests/urlopen hedefi girdiden",
+    severity: "P1", category: "SSRF", confidence: "low",
+    pattern: /\b(requests\.(get|post|put|delete|head)|urllib\.request\.urlopen|urlopen|httpx\.(get|post))\s*\(\s*[^)]*request\.(GET|POST|data|args)/,
+    pathInclude: /\.py$/,
+    impact: "İstek hedefi kullanıcı girdisiyle belirleniyor; iç ağ/metadata servisine erişim mümkün.",
+    recommendation: "Hedef host'u allow-list ile doğrula; iç IP aralıklarını engelle.",
+    references: ["OWASP A10:2021"], effort: "M",
+  },
+
+  // ---- SSTI (Server-Side Template Injection) -----------------------------
+  {
+    id: "B6-ssti-py", check: "B6", module: "B", title: "SSTI adayı: render_template_string dinamik girdiyle",
+    severity: "P0", category: "Injection", confidence: "medium",
+    pattern: /render_template_string\s*\(\s*[^)]*(\+|%|\.format\(|f['"]|request\.)/,
+    pathInclude: /\.py$/,
+    impact: "Kullanıcı girdisi Jinja2 template'ine gömülüyor; SSTI → RCE mümkün.",
+    recommendation: "Template'i sabit tut; kullanıcı verisini yalnızca bağlam değişkeni olarak geçir; autoescape.",
+    references: ["OWASP A03:2021"], effort: "M",
+  },
+  {
+    id: "B6-ssti-node", check: "B6", module: "B", title: "SSTI adayı: template derleme dinamik girdiyle",
+    severity: "P1", category: "Injection", confidence: "low",
+    pattern: /\b(Handlebars\.compile|ejs\.render|pug\.compile|_\.template)\s*\(\s*[^)]*(req\.|\$\{|\+)/,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "Kullanıcı girdisi template motoruna derleniyor; SSTI/kod çalıştırma riski.",
+    recommendation: "Template kaynağını sabit tut; girdiyi yalnızca veri olarak geçir.",
+    references: ["OWASP A03:2021"], effort: "M",
+  },
+
+  // ---- Path traversal ----------------------------------------------------
+  {
+    id: "B6-path-traversal-node", check: "B6", module: "B", title: "Path traversal adayı: dosya yolu istemci girdisinden",
+    severity: "P1", category: "Path Traversal", confidence: "low",
+    pattern: /\b(readFile|readFileSync|createReadStream|sendFile|res\.sendFile|res\.download)\s*\(\s*[^)]*(req\.(params|query|body)|ctx\.params)/,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "Dosya yolu kullanıcıdan geliyor; `../` ile keyfi dosya okuma (LFI) mümkün.",
+    recommendation: "path.basename ile sınırla; kök dizine göre normalize edip prefix doğrula; allow-list kullan.",
+    references: ["OWASP A01:2021", "ASVS 12.3"], effort: "M",
+  },
+  {
+    id: "B6-path-traversal-py", check: "B6", module: "B", title: "Path traversal adayı: open() istemci girdisiyle",
+    severity: "P1", category: "Path Traversal", confidence: "low",
+    pattern: /\bopen\s*\(\s*[^)]*(request\.(GET|POST|args|data)|os\.path\.join\([^)]*request\.)/,
+    pathInclude: /\.py$/,
+    impact: "Dosya yolu kullanıcıdan geliyor; `../` ile keyfi dosya okuma mümkün.",
+    recommendation: "os.path.realpath ile kökü doğrula; kullanıcı girdisini allow-list'e bağla.",
+    references: ["OWASP A01:2021"], effort: "M",
+  },
+
+  // ---- Güvensiz deserialization (OWASP A08) ------------------------------
+  {
+    id: "B8-deserialize-node", check: "E8", module: "B", title: "Güvensiz deserialization (node-serialize/vm)",
+    severity: "P0", category: "Insecure Deserialization", confidence: "medium",
+    pattern: /\b(unserialize\s*\(|node-serialize|vm\.runInNewContext|vm\.runInThisContext)\b/,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "Güvensiz kaynaktan nesne deserialize ediliyor; node-serialize/vm ile RCE mümkün.",
+    recommendation: "JSON.parse + şema doğrulama kullan; güvenilmeyen veriyi asla deserialize etme.",
+    references: ["OWASP A08:2021"], effort: "M",
+  },
+  {
+    id: "B8-pickle-py", check: "E8", module: "B", title: "Güvensiz deserialization (pickle/yaml.load/marshal)",
+    severity: "P0", category: "Insecure Deserialization", confidence: "medium",
+    pattern: /\b(pickle\.loads?|cPickle\.loads?|marshal\.loads?|yaml\.load)\s*\(/,
+    validate: (line) => !/SafeLoader|safe_load|Loader\s*=\s*yaml\.Safe/.test(line),
+    pathInclude: /\.py$/,
+    impact: "Güvenilmeyen veri pickle/yaml.load ile deserialize ediliyor; RCE mümkün.",
+    recommendation: "yaml.safe_load kullan; pickle yerine JSON; güvenilmeyen veriyi deserialize etme.",
+    references: ["OWASP A08:2021"], effort: "M",
+  },
+  {
+    id: "B8-unserialize-php", check: "E8", module: "B", title: "PHP unserialize() (nesne enjeksiyonu)",
+    severity: "P1", category: "Insecure Deserialization", confidence: "low",
+    pattern: /\bunserialize\s*\(\s*\$/,
+    pathInclude: /\.php$/,
+    impact: "Kullanıcı verisi unserialize ediliyor; PHP object injection → RCE/POP zinciri.",
+    recommendation: "json_decode kullan; unserialize'a allowed_classes=false geç; güvenilmeyen veriyi deserialize etme.",
+    references: ["OWASP A08:2021"], effort: "M",
+  },
+  {
+    id: "B8-dotnet-deserialize", check: "E8", module: "B", title: ".NET güvensiz deserialization (BinaryFormatter/TypeNameHandling)",
+    severity: "P0", category: "Insecure Deserialization", confidence: "medium",
+    pattern: /\b(BinaryFormatter|LosFormatter|NetDataContractSerializer|TypeNameHandling\s*=\s*TypeNameHandling\.(All|Auto|Objects))\b/,
+    pathInclude: /\.cs$/,
+    impact: "Tip bilgisiyle deserialization RCE gadget'larına açık.",
+    recommendation: "BinaryFormatter'ı kaldır; System.Text.Json kullan; TypeNameHandling.None.",
+    references: ["OWASP A08:2021"], effort: "M",
+  },
+
+  // ---- XXE (XML External Entity) -----------------------------------------
+  {
+    id: "B6-xxe-py", check: "E3", module: "B", title: "XXE adayı: XML parser dış-varlık çözümlü",
+    severity: "P1", category: "XXE", confidence: "low",
+    pattern: /(etree\.parse|XMLParser\s*\([^)]*resolve_entities\s*=\s*True|lxml.*no_network\s*=\s*False)/,
+    pathInclude: /\.py$/,
+    impact: "XML dış varlık çözümlemesi açık; dosya sızıntısı/SSRF (XXE) mümkün.",
+    recommendation: "defusedxml kullan; resolve_entities=False; DTD/harici varlıkları kapat.",
+    references: ["OWASP A05:2021", "ASVS 5.5"], effort: "M",
+  },
+
+  // ---- Open redirect -----------------------------------------------------
+  {
+    id: "B7-open-redirect", check: "B7", module: "B", title: "Open redirect adayı: yönlendirme hedefi girdiden",
+    severity: "P2", category: "Security Misconfiguration", confidence: "low",
+    pattern: /\bres\.redirect\s*\(\s*(req\.(query|params|body)|[^)]*\+\s*req\.)/,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "Yönlendirme hedefi kullanıcıdan; phishing için açık yönlendirme.",
+    recommendation: "Yalnızca göreli yol veya allow-list'teki host'lara yönlendir.",
+    references: ["OWASP A01:2021"], effort: "S",
+  },
+
+  // ---- Zayıf JWT: algorithm none -----------------------------------------
+  {
+    id: "B4-jwt-alg-none", check: "B4", module: "B", title: "JWT algorithm 'none' (imza doğrulaması atlanabilir)",
+    severity: "P0", category: "Auth Design", confidence: "high",
+    pattern: /algorithms?\s*:\s*\[?\s*['"]none['"]/i,
+    impact: "alg=none imzasız token'ı kabul eder; kimlik doğrulama tamamen atlanabilir.",
+    recommendation: "İzinli algoritmayı açıkça belirt (HS256/RS256); 'none'a asla izin verme.",
+    references: ["OWASP A02:2021", "OWASP A07:2021", "ASVS 3.5"], effort: "S",
+  },
+
+  // ---- Frontend: CSP zayıf · source map --------------------------------
+  {
+    id: "FE-csp-unsafe", check: "FE-2", module: "FE", title: "CSP 'unsafe-inline'/'unsafe-eval' (XSS koruması zayıf)",
+    severity: "P2", category: "Security Misconfiguration", confidence: "medium",
+    pattern: /Content-Security-Policy[\s\S]{0,120}?(unsafe-inline|unsafe-eval)/i,
+    impact: "unsafe-inline/eval CSP'nin XSS korumasını büyük ölçüde etkisizleştirir.",
+    recommendation: "nonce/hash tabanlı CSP kullan; inline script/style'ı kaldır.",
+    references: ["OWASP A05:2021"], effort: "M",
+  },
+  {
+    id: "FE-source-map-prod", check: "FE-4", module: "FE", title: "Üretimde source map açık (kaynak sızıntısı)",
+    severity: "P3", category: "Information Leak", confidence: "low",
+    pattern: /(productionSourceMap\s*:\s*true|sourcemap\s*:\s*true|devtool\s*:\s*['"](?:source-map|eval-source-map)['"])/,
+    pathInclude: /(vite|webpack|vue|next|rollup|nuxt)\.config\.[jt]s$|\.config\.[jt]s$/i,
+    impact: "Yayınlanan source map orijinal kaynağı/iç mantığı ifşa eder.",
+    recommendation: "Üretim derlemesinde source map'i kapat veya yalnızca gizli hata-izleme yüklemesine gönder.",
+    references: ["OWASP A05:2021"], effort: "S",
   },
 ];

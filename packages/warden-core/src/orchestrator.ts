@@ -7,6 +7,8 @@ import type { ReportPaths } from "./report/generator.ts";
 import { computeDelta } from "./report/delta.ts";
 import type { PreviousRun, Delta } from "./report/delta.ts";
 import { enrichRisk } from "./risk/score.ts";
+import { enrichKevEpss, loadKevData } from "./risk/kev.ts";
+import { enrichReachability, buildImportGraph } from "./risk/reachability.ts";
 import { loadWaivers, partitionWaived } from "./risk/waiver.ts";
 import type { AppliedWaiver } from "./risk/waiver.ts";
 import { buildAsvsChecklist } from "./risk/asvs.ts";
@@ -134,7 +136,17 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   const finishedAt = new Date().toISOString();
 
   // 4) Risk motoru: CVSS v4 + exploitability; ASVS + CIS + ISO checklist'leri.
-  const enriched = enrichRisk(findings);
+  //    + KEV/EPSS önceliklendirme (çevrimdışı; warden-data/ anlık-görüntülerinden, ağsız).
+  const kevData = loadKevData(opts.projectRoot);
+  if (kevData.kev.size > 0 || kevData.epss.size > 0) {
+    audit.info(`KEV/EPSS anlık-görüntüsü yüklendi (KEV=${kevData.kev.size}, EPSS=${kevData.epss.size}).`);
+  }
+  //    + reachability: zafiyetli bağımlılık kaynak import grafında mı (FP azaltma).
+  const importGraph = buildImportGraph(fs);
+  const enriched = enrichReachability(
+    enrichKevEpss(enrichRisk(findings), kevData.kev, kevData.epss),
+    importGraph,
+  );
 
   // 4b) Waiver: .warden-ignore.yml ile gerekçeli bastırılan bulguları ayır. Süresi
   //     geçmiş waiver'lar yok sayılır. Bastırılanlar rapor/gate dışı kalır ama log'lanır.

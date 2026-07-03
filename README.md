@@ -1,16 +1,42 @@
-# Warden
+# ⚔️ Warden
 
-> **Portable, defensive production-readiness & security audit tool.**
-> Point it at any project — Warden statically analyzes the code, config, dependencies and IaC
-> (and, *only with explicit authorization*, the running environment), lists everything
-> **missing / broken / risky** ranked by severity with **evidence**, and emits a copy‑paste
-> **Claude Code remediation playbook** for every P0/P1 finding.
+> **A defensive security platform — scan your code, then prove your defenses hold.**
+> Two parts, one guardian: **Warden Scan** finds everything *missing / broken / risky* in any
+> project, and **Warden Knight** turns your live defenses into a gamified knight that arms up
+> the more you harden it.
 
-[![tests](https://img.shields.io/badge/tests-116%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
-🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Full check catalog](docs/CHECKS.md)
+🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Check catalog](docs/CHECKS.md) · ⚔️ [Warden Knight dashboard](security-knight/README.md)
+
+---
+
+## Two parts, one guardian
+
+**Scan → fix → arm up → prove.** The scanner finds weaknesses; the Knight proves your defenses
+actually hold and makes hardening feel like leveling up a character.
+
+| | 🛡️ **Warden Scan** _(engine, this repo root)_ | ⚔️ **Warden Knight** _([`security-knight/`](security-knight/README.md))_ |
+|---|---|---|
+| **What** | Static + dynamic security audit of any codebase | Live, gamified posture dashboard for one app's defenses |
+| **Answers** | “What’s broken or risky in this code?” | “Are my defenses actually holding — and how strong?” |
+| **Form** | CLI / CI scanner → findings, SARIF, playbooks | Web panel + backend + bot‑attack harness |
+| **Loop** | scan → remediation playbook → re‑scan (before/after delta) | equip → prove (attack test) → level up |
+
+<div align="center"><img src="security-knight/assets/knight-lv6.png" width="190" alt="Warden Knight"/></div>
+
+> The two share one DNA — evidence‑based (measured, not claimed), authorization‑gated active
+> testing, and a remediation loop. Scan tells you what to fix; the Knight proves it stayed fixed.
+
+### The Warden Knight dashboard
+
+Your complete security posture — runtime bot‑defense **and** the whole Warden code scan — as one
+knight that arms up as you harden. Verified armor is solid; **unproven armor is a translucent
+“ghost”**; a broken defense **drops** with an alarm. Measured score (not claimed), grouped by domain.
+
+<div align="center"><img src="security-knight/assets/panel-combined.png" width="760" alt="Warden Knight dashboard — combined posture"/></div>
 
 ---
 
@@ -38,10 +64,11 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 
 ---
 
-## What it does
+## 🛡️ Warden Scan — what it does
 
 - **Module A — Parity & Deployment** (passive): git drift, destructive migrations (Prisma/Django/Laravel/EF Core/Go), runtime freshness, **generic volume‑parity engine**, `.env` ↔ `.env.example`, backup/restore + TLS expiry, external webhooks.
-- **Module B — SAST** (passive): hardcoded secrets, vulnerable dependencies (`npm/pnpm audit`), weak crypto (MD5/SHA1/ECB/CryptoJS), JWT‑in‑localStorage, IDOR, SQL/command/eval injection, CORS, frontend XSS sinks — across **TS/JS, Python, PHP, C#, Go**.
+- **Module B — SAST** (passive): hardcoded secrets (+ provider keys & **entropy‑based** detection + **git‑history** scan), vulnerable dependencies (`npm/pnpm audit`), weak crypto (MD5/SHA1/ECB/CryptoJS), JWT‑in‑localStorage & **`alg:none`**, IDOR, SQL/command/eval injection, **SSRF · SSTI · path traversal · insecure deserialization · XXE · open redirect**, CORS, frontend XSS sinks + **weak CSP / prod source‑maps** — across **TS/JS, Python, PHP, C#, Go**.
+- **Module Imports — external‑tool orchestrator** (passive): ingests any **SARIF 2.1.0** report (OpenGrep/Semgrep, Trivy, Gitleaks, Checkov, Nuclei) and **OSV‑Scanner** JSON from `warden-imports/`, normalizing them into Warden's finding model (auto‑routing each to the right dimension — IaC→CLOUD, K8s→K8S, DAST→C) so fingerprint/delta, scoring, playbook, waivers and SARIF re‑export apply to them too. With `WARDEN_TOOLS=all` (or a comma‑list) Warden **runs the installed engines directly** (OpenGrep/Semgrep/Trivy/Gitleaks/Checkov; `osv-scanner` live SCA), and gate‑restricted **Nuclei** for DAST — each skipped gracefully if absent.
 - **Module D — Compliance** (passive): observability, secret management, CI/CD, data protection, plus **PCI‑DSS 4.0** (CVV/PAN scanning + checklist) and **Privacy / GDPR‑KVKK** checklist.
 - **Module CLOUD** (passive, Terraform): public S3/GCS, IAM wildcards, open security groups/firewalls, public RDS/Cloud SQL, Azure public storage, Cloudflare SSL mode.
 - **Module K8S** (passive): privileged/root containers, `:latest` images, plaintext secret env, ingress without TLS.
@@ -50,6 +77,9 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 
 Every finding carries a **CVSS v4** base score + exploitability, standard mappings
 (**OWASP Top 10 / ASVS / API / CIS Benchmark / ISO 27001:2022**), evidence (`file:line` or command), and a remediation prompt.
+Findings that carry a CVE are additionally prioritized with **CISA KEV** (known‑exploited) and **EPSS** (30‑day exploit probability),
+loaded **offline** from optional `warden-data/kev.json` / `warden-data/epss.json` snapshots (no network — passive by default),
+and with **import‑level reachability** — a dependency that isn't in the source import graph (likely transitive) is de‑prioritized (unless it's KEV).
 
 ## Architecture
 
@@ -149,8 +179,8 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 131 tests passing; 10 vulnerable‑by‑design fixtures. See [`docs/CHECKS.md`](docs/CHECKS.md)
-for the full, per‑check status catalog.
+Actively developed. 204 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 ## License
 

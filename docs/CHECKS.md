@@ -26,12 +26,13 @@ Durum: ✅ uygulandı · 🚧 kısmen · ⏳ planlı.
 
 | ID | Kontrol | Tip | Şiddet | Faz | Durum | Eşleştirme |
 |----|---------|-----|:------:|:---:|:-----:|------------|
-| B1 | Secret taraması (kod + commit'lenmiş .env): AWS/private key/Slack/GitHub token, sabit secret. Git geçmişi 🚧 | pasif | P0 | 2 | ✅ | gitleaks/trufflehog · OWASP A07 |
-| B2 | Bağımlılık zafiyetleri: npm/pnpm audit (v6/v7 parser). pip-audit/govulncheck/OSV/Trivy Faz 6 | pasif | P1 | 2 | ✅ | OWASP A06 · OSV/Snyk/Trivy |
+| B1 | Secret taraması (kod + commit'lenmiş .env): AWS/private key/Slack/GitHub/Stripe/Google/GitLab/npm token, sabit secret, **entropi tabanlı** tespit, **git geçmişi** taraması | pasif | P0 | 2 | ✅ | gitleaks/trufflehog · OWASP A07 |
+| B2 | Bağımlılık zafiyetleri: npm/pnpm audit (v6/v7 parser) + **OSV-Scanner** çok-ekosistem adapteri (`WARDEN_OSV=1`/import). pip-audit/govulncheck Faz 6 | pasif | P1 | 2 | ✅ | OWASP A06 · OSV/Snyk/Trivy |
 | B3 | Zayıf kripto: MD5/SHA1, ECB, CryptoJS EvpKDF, token için `Math.random()` | pasif | P1 | 2 | ✅ | OWASP A02 · ASVS 6.2 |
-| B4 | Auth tasarımı: JWT localStorage (FE), uzun TTL. Refresh rotation/session fixation 🚧 | pasif | P1 | 2 | ✅ | OWASP A07 · ASVS 3.x |
+| B4 | Auth tasarımı: JWT localStorage (FE), uzun TTL, **JWT `alg:none`**. Refresh rotation/session fixation 🚧 | pasif | P1 | 2 | ✅ | OWASP A07 · ASVS 3.x |
 | B5 | Authz / multi-tenancy: IDOR adayı (heuristic, düşük güven). Tam RLS/tenant semantiği manuel | pasif | P1 | 2 | 🚧 | OWASP A01 · API1 (BOLA) · ASVS 4.x |
-| B6 | Injection: ham SQL concat, command injection, eval. SSTI/path traversal 🚧 | pasif | P0 | 2 | ✅ | OWASP A03 · semgrep |
+| B6 | Injection: ham SQL concat, command injection, eval, **SSTI, path traversal, SSRF, open redirect, XXE** | pasif | P0 | 2 | ✅ | OWASP A03/A10 · semgrep |
+| B8-deser | **Güvensiz deserialization** (node-serialize/vm · pickle/yaml.load · PHP unserialize · .NET BinaryFormatter) | pasif | P0 | 2 | ✅ | OWASP A08 |
 | B7 | Web sertleştirme: CORS wildcard. helmet/HSTS/rate-limit/CSRF varlığı 🚧 | pasif | P1 | 2 | 🚧 | OWASP A05 |
 | B8 | Girdi doğrulama kapsamı: Zod/Joi/pydantic endpoint kapsamı | pasif | P2 | 2 | ⏳ | ASVS 5.x |
 | B9 | Bilgi sızıntısı: yanıtta stack trace. debug flag/source map 🚧 | pasif | P2 | 2 | 🚧 | OWASP A05 |
@@ -115,9 +116,9 @@ OWASP açıklarını **açık isimle** bulur ve ASVS kontrollerine eşler. Rapor
 | ID | Kontrol | Faz | Durum |
 |----|---------|:---:|:-----:|
 | FE-1 | localStorage/sessionStorage'da JWT/token | 2 | ✅ |
-| FE-2 | CSP eksikliği / zayıf CSP | 2 | ⏳ |
+| FE-2 | Zayıf CSP (`unsafe-inline`/`unsafe-eval`) | 2 | ✅ |
 | FE-3 | XSS sink'leri · `dangerouslySetInnerHTML` · Vue `v-html` | 2 | ✅ |
-| FE-4 | Source map yayını (prod) | 2 | ⏳ |
+| FE-4 | Source map yayını (prod build config) | 2 | ✅ |
 
 ## Modül AI — AI / LLM Security (pasif) · Faz 6+
 
@@ -151,4 +152,8 @@ OWASP açıklarını **açık isimle** bulur ve ASVS kontrollerine eşler. Rapor
 | Continuous Monitoring Mode | `warden monitor --interval` periyodik tarama + delta (cron/Action ile de) | + | ✅ |
 | **CIS Benchmark** eşleştirmesi | bulgulardan türetilen checklist (K8s/AWS/Azure/GCP/Docker) ✖/– | + | ✅ |
 | **ISO 27001:2022** eşleştirmesi | bulgulardan türetilen Annex A checklist (A.5.15/8.8/8.9/8.13/8.15/8.24/8.25/8.28) ✖/– | + | ✅ |
-| Sarmalanan araçlar | Semgrep · Trivy · Gitleaks · OSV · Nuclei (yetki kapılı) | 2/4 | ⏳ |
+| **Dış araç orkestrasyonu (SARIF/OSV içe-aktarım)** | `warden-imports/*.sarif` (OpenGrep/Semgrep/Trivy/Gitleaks/Checkov/Nuclei) + `*.osv.json` → Finding normalizasyonu; `WARDEN_OSV=1` canlı osv-scanner. Bulgular fingerprint/delta/skor/playbook/waiver/SARIF-export'a girer | 2 | ✅ |
+| **KEV + EPSS önceliklendirme** | CVE taşıyan bulgulara CISA KEV (bilinen-sömürülen) + EPSS (30-gün olasılık); **çevrimdışı** `warden-data/kev.json` / `epss.json` anlık-görüntüsünden (ağsız) | 5 | ✅ |
+| **Reachability (import-seviyesi)** | Zafiyetli bağımlılık kaynak import grafında mı; değilse (olası transitif) öncelik düşürülür (KEV hariç). Tam çağrı-grafı değil | 6 | ✅ |
+| **Native araç runner'ları** | `WARDEN_TOOLS=all\|opengrep,semgrep,trivy,gitleaks,checkov` kuruluysa doğrudan çalıştırır → SARIF normalize; **nuclei** yetki-kapılı (DAST, non-destructive etiketler). Kurulu değilse graceful atlar. OSV native runner ✅ | 2/4 | ✅ |
+| **İçe-aktarım modül ataması** | SARIF bulguları araç adından modüle atanır (checkov→CLOUD, kubescape→K8S, nuclei/zap→C, semgrep/gitleaks/trivy→B); scoreboard boyutları buna göre | 2 | ✅ |

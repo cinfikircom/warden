@@ -1,0 +1,38 @@
+name: Security Knight CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 1) Syntax gate — tüm ES modülleri parse edilebilmeli
+      - name: Syntax check
+        run: for f in *.mjs; do node --check "$f"; done
+
+      # 2) (Opsiyonel) Canlı doğrulama — yalnız STAGING_URL secret'ı tanımlıysa.
+      #    Saldırı motoru + verify-cycle staging'e koşar → verification.json üretir.
+      #    ⚠ Yalnız SANA AİT staging'e; non-destructive. Secret'lar: STAGING_URL, REQUEST_PATH, SELFCHECK_URL.
+      - name: Verify defenses against staging
+        if: ${{ secrets.STAGING_URL != '' }}
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          REQUEST_PATH: ${{ secrets.REQUEST_PATH }}
+          SK_SELFCHECK_URL: ${{ secrets.SELFCHECK_URL }}
+        run: |
+          HOST="$(echo "$STAGING_URL" | sed -E 's#https?://([^/]+).*#\1#')"
+          node attack-harness.mjs --base "$STAGING_URL" --request "$REQUEST_PATH" \
+            --authorize --allow "$HOST" --ack-emails || true
+          node verify-cycle.mjs
+
+      # 3) Regresyon muhafızı — düşmüş (failed) zırh varsa CI kırılır.
+      - name: Regression guard
+        run: node ci-check.mjs --require honeypot,hmac,rlip,rlmail,rlverify

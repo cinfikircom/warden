@@ -18,6 +18,12 @@ export interface SourceRule {
   readonly confidence: Confidence;
   /** Satır bazında test edilen desen. */
   readonly pattern: RegExp;
+  /**
+   * Desen eşleştikten SONRA çalışan ek doğrulayıcı (opsiyonel). `false` dönerse eşleşme
+   * bulguya çevrilmez. Entropi/bağlam kontrolüyle false-positive'i düşürmek için (ör. B1
+   * yüksek-entropi secret). Saf ve yan-etkisiz olmalı.
+   */
+  readonly validate?: (line: string) => boolean;
   /** Yalnızca bu yola uyan dosyalarda çalışır (verilmezse tüm kod dosyaları). */
   readonly pathInclude?: RegExp;
   readonly pathExclude?: RegExp;
@@ -62,6 +68,7 @@ export function scanSource(ctx: DetectContext, rules: readonly SourceRule[], opt
         const line = lines[i] as string;
         rule.pattern.lastIndex = 0;
         if (!rule.pattern.test(line)) continue;
+        if (rule.validate && !rule.validate(line)) continue;
         hits++;
         const f = makeFinding({
           id: `${rule.id}:${file}:${i + 1}`,
