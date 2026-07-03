@@ -93,6 +93,8 @@ export function mountSecurityKnight(target, options = {}){
   if (!posture) throw new Error("mountSecurityKnight: options.posture gerekli.");
   const mode = options.mode || (options.endpoint ? "live" : "demo");
   const assetBase = options.assetBase || "assets"; // gerçekçi şövalye görselleri (knight-lv1..6.png)
+  const loopEnabled = mode === "live" && (options.loopEndpoint || options.endpoint); // Phase 4: tek döngü
+  const loopUrl = options.loopEndpoint || "/api/loop/run";
 
   // Durum kopyası (canlı modda backend ile güncellenir).
   const state = {
@@ -136,6 +138,23 @@ export function mountSecurityKnight(target, options = {}){
     if (!t){ t = document.createElement("div"); t.className = "sk-toast"; target.appendChild(t); }
     t.textContent = msg; t.classList.add("show");
     clearTimeout(toast._); toast._ = setTimeout(()=>t.classList.remove("show"), 2800);
+  }
+
+  // Phase 4 — tek döngü: Warden taraması → köprü → doğrulama; sonra panel kendini yeniler.
+  let looping = false;
+  async function tryLoop(){
+    if (looping) return; looping = true;
+    toast("🔄 Döngü başladı: Warden taraması → köprü → doğrulama…");
+    try { await apiFetch(loopUrl, { method:"POST", headers:{ "content-type":"application/json" }, body:"{}" }); }
+    catch { toast("Backend'e ulaşılamadı — döngü tetiklenemedi."); looping = false; return; }
+    let tries = 0;
+    const iv = setInterval(async () => {
+      const before = computeMeasuredScore(state.layers, state.verification);
+      await loadPosture(); render();
+      const after = computeMeasuredScore(state.layers, state.verification);
+      if (after !== before) toast(`Şövalye güncellendi — ölçülen güç ${after}/100.`);
+      if (++tries >= 10){ clearInterval(iv); looping = false; }
+    }, 2500);
   }
 
   function snapshot(){
@@ -310,7 +329,10 @@ export function mountSecurityKnight(target, options = {}){
       <div class="sk-top">
         <div><div class="sk-title">⚔️ Güvenlik Şövalyesi</div>
           <div class="sk-sub">Bot &amp; kötüye kullanım savunmanın canlı karakteri — güç kazandıkça yükselir.</div></div>
-        <button class="sk-btn ghost sk-reset" style="display:${state.original ? "" : "none"}">↺ Gerçek duruma dön</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${loopEnabled ? `<button class="sk-btn sk-rescan">🔄 Yeniden tara & doğrula</button>` : ""}
+          <button class="sk-btn ghost sk-reset" style="display:${state.original ? "" : "none"}">↺ Gerçek duruma dön</button>
+        </div>
       </div>
 
       <div class="sk-hero">
@@ -383,6 +405,7 @@ export function mountSecurityKnight(target, options = {}){
       kimg.hidden = true;
       const fb = target.querySelector(".sk-knight-fallback"); if (fb) fb.hidden = false;
     };
+    const rs = target.querySelector(".sk-rescan"); if (rs) rs.onclick = tryLoop;
     target.querySelectorAll(".sk-act").forEach(b => b.onclick = () => openDrawer(b.dataset.key, b.dataset.kind));
     const rb = target.querySelector(".sk-reset");
     if (rb) rb.onclick = () => {
@@ -398,6 +421,8 @@ export function mountSecurityKnight(target, options = {}){
   // İlk yükleme: backend varsa oku, sonra çiz.
   render();
   loadPosture().then(render);
+  // Canlı: periyodik yenileme (döngü/ajan posture'u güncelleyince şövalye kendiliğinden armalanır).
+  if (options.pollMs && options.endpoint) setInterval(() => { loadPosture().then(render); }, options.pollMs);
   return { refresh: async () => { await loadPosture(); render(); },
     getScore: () => computeMeasuredScore(state.layers, state.verification) };
 }

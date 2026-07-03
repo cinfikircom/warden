@@ -14,6 +14,7 @@
  * =========================================================================
  */
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { readFile, writeFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -141,6 +142,15 @@ const server = createServer(async (req, res) => {
       await appendFile(JOBS_FILE, JSON.stringify(job) + "\n");
       await audit(req, "equip_queued", { key, job: job.id });
       return json(res, 202, { queued:true, job });
+    }
+    // Phase 4: run the loop (Warden scan → bridge → verify). Detached; panel polls for the result.
+    if (path === "/api/loop/run" && req.method === "POST"){
+      try {
+        const child = spawn("node", ["loop.mjs"], { cwd: ROOT, detached: true, stdio: "ignore" });
+        child.unref();
+        await audit(req, "loop_started");
+        return json(res, 202, { started: true, note: "Warden taraması → köprü → doğrulama çalışıyor." });
+      } catch (e){ return json(res, 500, { error: String(e.message) }); }
     }
     if (path === "/api/security/verify" && req.method === "POST"){
       const { key } = await body(req);
