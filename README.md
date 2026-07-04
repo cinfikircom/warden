@@ -1,11 +1,11 @@
 # ⚔️ Warden
 
-> **A defensive security platform — scan your code, then prove your defenses hold.**
+> **A defensive security platform — scan your code, then fix it, gamified.**
 > Two parts, one guardian: **Warden Scan** finds everything *missing / broken / risky* in any
-> project, and **Warden Knight** turns your live defenses into a gamified knight that arms up
-> the more you harden it.
+> project, and **Warden Knight** turns that real scan posture into a knight that arms up as you
+> fix real findings.
 
-[![tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-213%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -15,28 +15,29 @@
 
 ## Two parts, one guardian
 
-**Scan → fix → arm up → prove.** The scanner finds weaknesses; the Knight proves your defenses
-actually hold and makes hardening feel like leveling up a character.
+**Scan → fix → arm up → re-scan.** The scanner finds weaknesses; the Knight turns fixing them
+into leveling up a character — no claimed/manual state, only what a real re-scan proves.
 
 | | 🛡️ **Warden Scan** _(engine, this repo root)_ | ⚔️ **Warden Knight** _([`security-knight/`](security-knight/README.md))_ |
 |---|---|---|
-| **What** | Static + dynamic security audit of any codebase | Live, gamified posture dashboard for one app's defenses |
-| **Answers** | “What’s broken or risky in this code?” | “Are my defenses actually holding — and how strong?” |
-| **Form** | CLI / CI scanner → findings, SARIF, playbooks | Web panel + backend + bot‑attack harness |
-| **Loop** | scan → remediation playbook → re‑scan (before/after delta) | equip → prove (attack test) → level up |
+| **What** | Static + dynamic security audit of any codebase | Live, gamified view of that same scan's posture |
+| **Answers** | “What’s broken or risky in this code?” | “Which dimensions are actually clean — and what's left?” |
+| **Form** | CLI / CI scanner → findings, SARIF, playbooks | Web panel + backend; "Equip" triggers a real re-scan |
+| **Loop** | scan → remediation playbook → re‑scan (before/after delta) | equip → real findings → fix (yourself or an agent) → re-scan → level up |
 
 <div align="center"><img src="security-knight/assets/knight-lv6.png" width="190" alt="Warden Knight"/></div>
 
 > The two share one DNA — evidence‑based (measured, not claimed), authorization‑gated active
-> testing, and a remediation loop. Scan tells you what to fix; the Knight proves it stayed fixed.
+> testing, and a remediation loop. Scan tells you what to fix; the Knight shows the same truth,
+> gamified, and never marks anything solid without a clean re-scan proving it.
 
 ### The Warden Knight dashboard
 
-Your complete security posture — runtime bot‑defense **and** the whole Warden code scan — as one
-knight that arms up as you harden. Verified armor is solid; **unproven armor is a translucent
-“ghost”**; a broken defense **drops** with an alarm. Measured score (not claimed), grouped by domain.
+Your whole Warden scan posture (SAST, Cloud, Compliance, K8s, DAST, …) as one knight that arms up
+as you fix real findings. A dimension Warden scanned clean is **solid** armor; a P0 dimension is a
+**cracked** quest with the actual finding shown, not template text. Measured score (not claimed).
 
-<div align="center"><img src="security-knight/assets/panel-combined.png" width="760" alt="Warden Knight dashboard — combined posture"/></div>
+<div align="center"><img src="security-knight/assets/panel-combined.png" width="760" alt="Warden Knight dashboard"/></div>
 
 ---
 
@@ -124,6 +125,17 @@ pnpm warden pentest --target <path>
 | `warden-run.log` | Audit trail of every command/request |
 
 Severity: **P0** (production blocker / actively exploitable) · **P1** (before first customer) · **P2** (architectural debt) · **P3** (scale/polish).
+
+### Launch the gamified dashboard
+
+```bash
+pnpm knight   # → opens the Warden Knight panel in your browser automatically
+```
+
+Run a scan (`pnpm warden scan`) first so there's something to arm up. From then on, everything —
+re-scanning, equipping an armor piece (which triggers a real scan and shows real findings), queuing
+a fix for an agent, watching the knight level up — happens from the panel itself; no need to come
+back to the terminal. See [`security-knight/README.md`](security-knight/README.md) for the full picture.
 
 ## The value loop
 

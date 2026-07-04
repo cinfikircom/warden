@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,5 +66,63 @@ describe("Warden CLI smoke", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("--module + prompts", () => {
+    function makeFixture(): string {
+      const dir = mkdtempSync(join(tmpdir(), "warden-cli-module-test-"));
+      mkdirSync(join(dir, "src"), { recursive: true });
+      writeFileSync(
+        join(dir, "src", "app.js"),
+        'const crypto = require("crypto");\n' +
+          'function hash(x) { return crypto.createHash("md5").update(x).digest("hex"); }\n' +
+          "module.exports = { hash };\n",
+      );
+      writeFileSync(join(dir, "package.json"), "{}\n");
+      return dir;
+    }
+
+    it("--module B yalnızca B'yi tarar, diğer modüller n/d kalır", async () => {
+      const dir = makeFixture();
+      try {
+        const { code, stdout } = await runCli(["scan", "--target", dir, "--module", "B"], dir);
+        expect(code).toBe(0);
+        expect(stdout).toContain("Çalışan modül: B");
+        const findingsJson = JSON.parse(readFileSync(join(dir, "warden-report", "findings.json"), "utf8"));
+        const board = findingsJson.scoreboard as Array<{ module: string; score: number | null }>;
+        expect(board.find((r) => r.module === "B")?.score).not.toBeNull();
+        expect(board.find((r) => r.module === "A")?.score).toBeNull();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("prompts --module B --json, taramadan sonra bulgu prompt'unu basar", async () => {
+      const dir = makeFixture();
+      try {
+        await runCli(["scan", "--target", dir, "--module", "B"], dir);
+        const { code, stdout } = await runCli(["prompts", "--target", dir, "--module", "B"], dir);
+        expect(code).toBe(0);
+        const out = JSON.parse(stdout);
+        expect(out.module).toBe("B");
+        expect(out.count).toBe(1);
+        expect(out.prompts[0].fingerprint).toBe(
+          JSON.parse(readFileSync(join(dir, "warden-report", "findings.json"), "utf8")).findings[0].fingerprint,
+        );
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("prompts, önceden tarama yokken exit 2 + yardımcı mesaj verir", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "warden-cli-module-test-"));
+      try {
+        const { code, stderr } = await runCli(["prompts", "--target", dir, "--module", "B"], dir);
+        expect(code).toBe(2);
+        expect(stderr).toContain("önce");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 });

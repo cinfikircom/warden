@@ -16,6 +16,8 @@ export type { ScoreRow } from "./report/scoreboard.ts";
 export { toSarif } from "./report/sarif.ts";
 export { computeDelta, renderDeltaSection } from "./report/delta.ts";
 export type { Delta, PreviousRun } from "./report/delta.ts";
+export { buildFindingPrompt, renderFindingPromptMd } from "./report/prompt.ts";
+export type { FindingPrompt } from "./report/prompt.ts";
 export { enrichRisk, scoreOf } from "./risk/score.ts";
 export type { Exploitability } from "./risk/score.ts";
 export { buildAsvsChecklist, violatedAsvsCodes } from "./risk/asvs.ts";

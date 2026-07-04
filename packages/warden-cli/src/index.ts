@@ -1,7 +1,8 @@
 #!/usr/bin/env -S tsx
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { runScan, WARDEN_VERSION, evaluateAuthz, SEVERITIES, severityRank } from "@warden/core";
-import type { ScanResult, ParityResult, ComplianceResult, Severity } from "@warden/core";
+import { runScan, WARDEN_VERSION, evaluateAuthz, SEVERITIES, severityRank, defaultModules, reportPaths, buildFindingPrompt, MODULES } from "@warden/core";
+import type { ScanResult, ParityResult, ComplianceResult, Severity, WardenModule, Finding, ModuleId } from "@warden/core";
 import { checklistScore } from "@warden/core";
 import { runInit } from "./init.ts";
 
@@ -10,6 +11,7 @@ import { runInit } from "./init.ts";
  *   warden scan    [--target <yol>]   Pasif (read-only) denetim. Varsayılan.
  *   warden pentest [--target <yol>]   Aktif denetim — yalnızca yetki kapısı açıkken.
  *   warden report  [--target <yol>]   Mevcut warden-report/ özetini gösterir.
+ *   warden prompts [--target <yol>]   Var olan findings.json'dan ajana-devredilebilir prompt'ları basar.
  *   warden --help | --version
  *
  * Güvenlik (iş emri §2): pentest dahi yetki kapısı kapalıysa yalnızca pasif koşar.
@@ -23,6 +25,12 @@ interface Parsed {
   failOn: Severity | null;
   interval: number;
   once: boolean;
+  /** --module A,B,CLOUD — verilen modül alt-kümesiyle sınırlı tarama (yalnızca CI tek-boyut kapısı için; bkz. HELP). */
+  modules: readonly ModuleId[] | null;
+  /** `prompts` komutu: --severity P0,P1 (varsayılan). */
+  severity: readonly Severity[] | null;
+  /** `prompts` komutu: --fingerprint <fp1,fp2> — verilirse yalnızca bu fingerprint'ler. */
+  fingerprint: readonly string[] | null;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -38,6 +46,9 @@ function parseArgs(argv: readonly string[]): Parsed {
   let failOn: Severity | null = null;
   let interval = 1800;
   let once = false;
+  let modules: readonly ModuleId[] | null = null;
+  let severity: readonly Severity[] | null = null;
+  let fingerprint: readonly string[] | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--target" || a === "-t") {
@@ -50,10 +61,18 @@ function parseArgs(argv: readonly string[]): Parsed {
       const v = Number.parseInt(args[++i] ?? "", 10);
       if (Number.isFinite(v) && v > 0) interval = v;
     } else if (a === "--once") once = true;
-    else if (a === "--help" || a === "-h") help = true;
+    else if (a === "--module" || a === "-m") {
+      const ids = (args[++i] ?? "").toUpperCase().split(",").map((s) => s.trim()).filter(Boolean);
+      modules = ids.filter((id): id is ModuleId => (MODULES as readonly string[]).includes(id));
+    } else if (a === "--severity") {
+      const vs = (args[++i] ?? "").toUpperCase().split(",").map((s) => s.trim()).filter(Boolean);
+      severity = vs.filter((v): v is Severity => (SEVERITIES as readonly string[]).includes(v));
+    } else if (a === "--fingerprint") {
+      fingerprint = (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    } else if (a === "--help" || a === "-h") help = true;
     else if (a === "--version" || a === "-v") version = true;
   }
-  return { command, target, help, version, failOn, interval, once };
+  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint };
 }
 
 /** CI gate: eşik şiddetinde/üstünde bulgu varsa true (çıkış kodu 1). */
@@ -61,6 +80,26 @@ function shouldFail(res: ScanResult, failOn: Severity | null): boolean {
   if (!failOn) return false;
   const threshold = severityRank(failOn);
   return res.findings.some((f) => severityRank(f.severity) <= threshold);
+}
+
+/**
+ * --module ile verilen alt-kümeyi WardenModule[]'a çevirir (yoksa undefined → yerleşik tam set).
+ * ⚠ Bununla üretilen findings.json yalnızca taranan modül(ler)i içerir — diğer tüm modüllerin
+ * skorunu "n/d" yapar. CI'da tek-boyut kapısı için kullanışlıdır; Warden Knight paneli
+ * DOĞRULUK için asla bunu kullanmaz, her zaman tam tarama yapar (bkz. security-knight/warden-equip.mjs).
+ */
+function resolveModules(ids: readonly ModuleId[] | null): WardenModule[] | undefined {
+  if (!ids || ids.length === 0) return undefined;
+  const want = new Set(ids);
+  const mods = defaultModules().filter((m) => want.has(m.id));
+  if (mods.length === 0) process.stderr.write(`⚠ --module eşleşmedi: ${ids.join(",")}\n`);
+  return mods;
+}
+
+/** exactOptionalPropertyTypes altında `modules: undefined` geçmemek için: yalnızca varsa ekle. */
+function scanOptionsFor(target: string, intent: "scan" | "pentest", moduleIds: readonly ModuleId[] | null) {
+  const modules = resolveModules(moduleIds);
+  return modules ? { projectRoot: target, intent, modules } : { projectRoot: target, intent };
 }
 
 const HELP = `Warden ${WARDEN_VERSION} — production-readiness & güvenlik denetimi (savunma amaçlı)
@@ -71,6 +110,9 @@ Kullanım:
   warden pentest [--target <yol>]   Aktif/DAST denetim. YALNIZCA warden.authz.yml açıkken çalışır.
   warden report  [--target <yol>]   Son warden-report/ özetini yazdırır.
   warden monitor [--target <yol>]   Sürekli izleme: periyodik tarama + öncesi/sonrası delta.
+  warden prompts --target <yol> --module <A|B|D|CLOUD|K8S|FE|AI|C|...>
+                                    Var olan findings.json'dan (önce scan koş) ajana-devredilebilir
+                                    prompt'ları JSON basar — [--severity P0,P1] [--fingerprint <fp1,fp2>].
   warden --help | --version
 
 Seçenekler:
@@ -78,6 +120,9 @@ Seçenekler:
   --fail-on <şiddet>   CI gate: P0|P1|P2|P3 ve üstü bulgu varsa çıkış kodu 1 (SARIF + exit gate).
   --interval <sn>      monitor: taramalar arası saniye (varsayılan 1800).
   --once               monitor: tek tur koş ve çık.
+  --module <liste>     scan/pentest/report/monitor: yalnızca verilen modül(ler) (virgülle, ör. B,CLOUD).
+                        ⚠ Diğer tüm modüllerin skorunu "n/d" yapar — tek-boyut CI kapısı içindir,
+                        tam postür/delta için --module KULLANMA.
 
 ⛔ Güvenlik: Varsayılan read-only. Aktif testler yetki kapısına (warden.authz.yml) bağlıdır;
    yalnızca allow-list host'lara, rate-limited, non-destructive. DoS/brute-force/exploit YOK.`;
@@ -160,7 +205,8 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  printBanner();
+  // `prompts` çıktısı saf JSON olmalı (warden-equip.mjs stdout'u JSON.parse eder) — banner yok.
+  if (p.command !== "prompts") printBanner();
 
   switch (p.command) {
     case "init": {
@@ -168,7 +214,7 @@ async function main(): Promise<number> {
       return 0;
     }
     case "scan": {
-      const res = await runScan({ projectRoot: p.target, intent: "scan" });
+      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
       printSummary(res);
       return gateExit(res, p.failOn);
     }
@@ -179,12 +225,12 @@ async function main(): Promise<number> {
         for (const r of authz.reasons) process.stdout.write(`  • ${r}\n`);
         process.stdout.write("\n");
       }
-      const res = await runScan({ projectRoot: p.target, intent: "pentest" });
+      const res = await runScan(scanOptionsFor(p.target, "pentest", p.modules));
       printSummary(res);
       return gateExit(res, p.failOn);
     }
     case "report": {
-      const res = await runScan({ projectRoot: p.target, intent: "scan" });
+      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
       printSummary(res);
       return gateExit(res, p.failOn);
     }
@@ -194,12 +240,38 @@ async function main(): Promise<number> {
       for (;;) {
         tick++;
         process.stdout.write(`\n── monitor #${tick} · ${new Date().toISOString()} ──\n`);
-        const res = await runScan({ projectRoot: p.target, intent: "scan" });
+        const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
         printSummary(res);
         if (p.once) return gateExit(res, p.failOn);
         process.stdout.write(`\n(sonraki tarama ${p.interval}s sonra; durdurmak için Ctrl+C)\n`);
         await sleep(p.interval * 1000);
       }
+    }
+    case "prompts": {
+      if (!p.modules || p.modules.length === 0) {
+        process.stderr.write("Hata: --module gerekli (örn. --module B).\n");
+        return 2;
+      }
+      const findingsPath = reportPaths(p.target).findingsJson;
+      let raw: string;
+      try {
+        raw = readFileSync(findingsPath, "utf8");
+      } catch {
+        process.stderr.write(`Hata: ${findingsPath} okunamadı — önce \`warden scan\` çalıştırın.\n`);
+        return 2;
+      }
+      const parsed = JSON.parse(raw) as { findings?: Finding[]; generatedAt?: string };
+      const wantModules = new Set(p.modules);
+      const wantSeverity = new Set(p.severity && p.severity.length > 0 ? p.severity : (["P0", "P1"] as Severity[]));
+      const wantFp = p.fingerprint && p.fingerprint.length > 0 ? new Set(p.fingerprint) : null;
+      const findings = (parsed.findings ?? []).filter(
+        (f) => wantModules.has(f.module) && wantSeverity.has(f.severity) && (!wantFp || wantFp.has(f.fingerprint)),
+      );
+      const prompts = findings.map((f) => buildFindingPrompt(f));
+      process.stdout.write(
+        JSON.stringify({ module: [...p.modules].join(","), count: prompts.length, generatedAt: parsed.generatedAt ?? null, prompts }, null, 2) + "\n",
+      );
+      return 0;
     }
     default:
       process.stderr.write(`Bilinmeyen komut: ${p.command}\n\n${HELP}\n`);

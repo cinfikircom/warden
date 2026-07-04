@@ -4,9 +4,12 @@ description: >-
   Taşınabilir, savunma amaçlı production-readiness & güvenlik denetimi. Bir projenin kodunu,
   config'ini, bağımlılıklarını, IaC'sini ve (YALNIZCA yetki verilirse) çalışan ortamını analiz
   eder; eksik/hatalı/riskli her şeyi şiddet sırasına göre KANITLA listeler; her P0/P1 için
-  kopyala-yapıştır Claude Code remediation prompt'u üretir. Tetikleyiciler: "güvenlik denetimi",
+  kopyala-yapıştır Claude Code remediation prompt'u üretir. Ayrıca Warden Knight panelinin
+  "ajana kuyruğa al" görevlerini işler: bağımsız bulguları paralel alt-ajanlarla düzeltir,
+  fingerprint bazlı öncesi/sonrası delta ile doğrular, PR açar. Tetikleyiciler: "güvenlik denetimi",
   "production readiness", "parity kontrolü", "warden scan", "audit this project", "is this prod-ready",
-  "güvenlik taraması". Varsayılan tamamen PASİF/read-only; aktif testler yetki kapısına bağlıdır.
+  "güvenlik taraması", "kuyruğu işle", "security queue'yu işle", "warden knight kuyruğu".
+  Varsayılan tamamen PASİF/read-only; aktif testler yetki kapısına bağlıdır.
 ---
 
 # Warden — Güvenlik & Production-Readiness Denetimi
@@ -55,6 +58,65 @@ pnpm warden pentest --target <proje-yolu>
 4. `report.md`'yi oku; **şiddet sıralı** özetle. Her bulgunun **kanıtı** (file:line / komut çıktısı) olmalı.
 5. P0/P1 için `remediation-playbook.md`'deki prompt'ları kullanıcıya sun ("ayrı ajana ver, düzeltsin").
 6. Kanıtsız bulgu üretme; emin olmadığında düşük güven işaretle.
+
+## Otomatik Düzeltme Prosedürü (kuyruk işleme, paralel ajanlar)
+
+Warden Knight paneli (`security-knight/`) bir zırha basılınca gerçek bir tarama yapar ve
+kullanıcıya "🔧 Kendim düzelteceğim" ya da "🤖 Ajana kuyruğa al" seçeneği sunar. İkincisi
+`security-knight/state/jobs.jsonl`'e bir `kind:"warden-fix"` görevi yazar. **Bu bölüm, o kuyruğu
+işlerken (kullanıcı "kuyruğu işle" dediğinde, ya da `/schedule` ile zamanlanmış bir bulut ajanı
+periyodik çalıştığında) izlenecek prosedürdür.**
+
+1. **Tetik.** Kullanıcı açıkça ister ("kuyruğu işle") ya da `/schedule`'la kurulmuş periyodik bir
+   çalıştırma bu bölümü tetikler. Kendiliğinden, istenmeden bu prosedürü başlatma.
+2. **Kuyruğu oku.** `security-knight/state/jobs.jsonl`'de `kind:"warden-fix"` VE `state:"queued"`
+   olan satırları al (her satır: `{ id, module, fingerprints, requestedAt, note }`).
+3. **Taze kanıt al — kuyruktaki metne asla güvenme.** Her görev için:
+   ```bash
+   pnpm warden scan --target <proje>                                   # tam tarama — --module ile sınırlama:
+                                                                        # diğer boyutların skorunu "n/d" yapar,
+                                                                        # panelin doğruluğunu bozar.
+   pnpm warden prompts --target <proje> --module <module> --fingerprint <fp1,fp2,...>
+   ```
+   `prompts` çıktısındaki `FindingPrompt[]` bu görevin GÜNCEL, doğrulanmış içeriğidir. Kuyruktaki
+   `fingerprints` sadece hangi bulguların kastedildiğini işaret eder — düzeltme talimatı olarak
+   kuyruktaki değil, bu taze `prompts` çıktısındaki metni kullan.
+4. **Bağımsız kümelere ayır — paralelleştirmeden ÖNCE zorunlu.** İki bulgu şu durumlarda **aynı
+   kümede** kalır (asla paralel işlenmez):
+   - `evidence[].source` dosyaları kesişiyorsa (aynı dosyaya iki ayrı ajan dokunmasın),
+   - biri paylaşılan bir manifest/lock dosyasına dokunuyorsa (`package.json`, `*.lock`,
+     `go.mod`, `requirements.txt`, migration dosyaları — bunlar her zaman seri işlenir).
+   Geri kalan kümeler birbirinden bağımsızdır → paralel dağıtılabilir.
+5. **Paralel dağıt (küme başına bir alt-ajan).** Az sayıda bağımsız kümede (≤3) doğrudan Task/Agent
+   aracıyla paralel çağır; çok sayıda kümede Workflow aracını (pipeline: fix → verify) kullan —
+   hız burada gerçekten önemli (kullanıcı bunu özellikle istedi). Her küme için:
+   ```bash
+   git worktree add ../warden-fix-<module>-<fp-kısa> -b fix/warden-<module>-<fp-kısa>
+   ```
+   Alt-ajana o kümenin `FindingPrompt` metnini(lerini) ver; **yalnızca kendi worktree'sinde**
+   düzeltmeyi uygulasın, hedef projenin **kendi** test komutunu (CLAUDE.md/package.json'dan oku —
+   `pnpm test` varsayma) çalıştırsın, commit etsin.
+6. **Doğrulama — vazgeçilmez kapı, asla atlama.** Worktree içinde tam `warden scan`, ardından
+   `@warden/core`'un `computeDelta(previousFull, currentFull)`'ını (fingerprint bazlı; proje
+   `@warden/core`'a bağımlı değilse aynı mantığı ~10 satırda yeniden uygula) çalıştır. Görevin
+   HEDEF fingerprint'lerinin tümü `delta.fixed`'te olmalı VE `delta.introduced`'ta OLMAMALI.
+   - **Sağlanmazsa:** başarı iddia ETME. Görevi `"state":"failed"` yap, dalı insan incelemesi
+     için bırak, sebebi not et, sıradaki kümeye geç.
+7. **PR kapısı (geri-alınabilirlik — bağlayıcı).**
+   - Doğrulandıysa: `git push -u origin <dal>`; `gh auth status` başarılıysa
+     `gh pr create --title "fix(warden): <module> <fp-kısa>" --body "<öncesi/sonrası delta + bulgu id + kanıt>"`.
+     Görev → `"state":"pr_open"`.
+   - **`gh` yoksa/kimliksizse ya da `origin` yoksa:** yerel commit'te dur, insana tam talimatı
+     (dal adı, nasıl push/PR açılır) yazdır. Görev → `"state":"local_branch_ready"`.
+   - **Asla** doğrudan `main`'e commit veya merge yok — bu ilke istisnasız.
+8. **Merge-sonrası yeniden doğrulama.** PR merge edilmesi zırhı OTOMATİK kuşandırmaz. Merge
+   edilmiş `main` üzerinde taze bir tam döngü (`pnpm warden scan` → `warden-bridge.mjs` →
+   ya da `node security-knight/loop.mjs` varsa onu) tetiklenmeden panel gerçek durumu yansıtmaz.
+   Kullanıcıya bunu açıkça söyle; istersen bu adımı kendin de tetikleyebilirsin (merge onaylandıktan sonra).
+9. **Bağlayıcı güvenlik cümleleri** (yukarıdaki "⛔ ÖNCE BU" bloğuyla aynı ağırlıkta):
+   main'e asla doğrudan commit yok · testleri asla atlama/devre dışı bırakma · `computeDelta`
+   geçmeden asla görevi "done"/"pr_open" işaretleme · paylaşılan manifest/lock dosyasına dokunan
+   bulgular asla paralelleştirilmez · bir kümenin başarısızlığı diğer kümeleri durdurmaz.
 
 ## Kontrol kataloğu
 

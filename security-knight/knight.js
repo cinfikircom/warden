@@ -3,12 +3,13 @@
  * =========================================================================
  * Kullanım (README'de detay):
  *   import { mountSecurityKnight } from "./knight.js";
- *   import { POSTURE } from "./posture.js";
- *   mountSecurityKnight(document.querySelector("#kok"), { posture: POSTURE, endpoint: "/api/security/posture" });
+ *   import { WARDEN_POSTURE } from "./posture-warden.js";
+ *   mountSecurityKnight(document.querySelector("#kok"), { posture: WARDEN_POSTURE, endpoint: "/api/warden/posture", mode:"live" });
  *
- * Zırh durumunun GERÇEK kaynağı backend'dir (endpoint). "Kuşan" bir görev açar; düzeltmeyi
- * uygulayıp backend "active" dediğinde zırh kalıcı belirir. Bir zırh eklemek = posture.js'e
- * bir nesne (SVG parçası dahil) — bu dosya değişmez.
+ * Zırh durumunun GERÇEK kaynağı backend'dir (endpoint) — `warden-bridge.mjs`'in gerçek bir
+ * Warden taramasından ürettiği durum. "Kuşan" gerçek bir tarama tetikler (bkz. openWardenDrawer);
+ * hiçbir buton doğrudan "active" yazmaz. Bir zırh eklemek = posture-warden.js'e bir nesne
+ * (Warden modül id'siyle eşleşen `key`, SVG parçası dahil) — bu dosya değişmez.
  * =========================================================================
  */
 
@@ -96,12 +97,20 @@ export function mountSecurityKnight(target, options = {}){
   const loopEnabled = mode === "live" && (options.loopEndpoint || options.endpoint); // Phase 4: tek döngü
   const loopUrl = options.loopEndpoint || "/api/loop/run";
 
+  const jobsUrl = options.jobsEndpoint || "/api/warden/jobs";
+  // Gerçek-taramaya-dayalı akış (Warden-tarama boyutları için; bkz. plan Bölüm D).
+  const scanUrl = options.scanEndpoint || "/api/warden/scan";
+  const gapsUrl = options.gapsEndpoint || "/api/warden/gaps";
+  const fixQueueUrl = options.fixQueueEndpoint || "/api/warden/fix-queue";
+  const SEVERITY_EMOJI = { P0:"🔴", P1:"🟠", P2:"🟡", P3:"⚪" };
+
   // Durum kopyası (canlı modda backend ile güncellenir).
   const state = {
     layers: posture.layers.map(l => ({ ...l })),
     relics: (posture.relics || []).map(l => ({ ...l })),
     metrics: options.metrics || posture.metrics || {},
     verification: {},   // key → { state:"verified|claimed|failed", method, detail } (backend'den)
+    pendingKeys: new Set(), // kuyrukta "queued" bekleyen görevlerin key'leri — arka planda iş sürüyor göstergesi
     original: null,
   };
 
@@ -123,6 +132,43 @@ export function mountSecurityKnight(target, options = {}){
       if (data.metrics) state.metrics = data.metrics;
       if (data.verification) state.verification = data.verification.results || data.verification;
     }catch(e){ /* offline/demo → gömülü posture */ }
+  }
+
+  // Kuyrukta bekleyen ("queued") görevler → "arka planda işleniyor" göstergesi.
+  // Ajan bir görevi tamamlayıp posture'u "active" yapınca, o key artık pending sayılmaz
+  // (durum gerçeğin tek kaynağıdır); job kaydı kuyrukta kalsa bile panel doğru gösterir.
+  async function loadJobs(){
+    if (mode !== "live") return;
+    try{
+      const res = await apiFetch(jobsUrl);
+      const data = await res.json();
+      const pending = new Set();
+      for (const j of (data.jobs || [])) if (j.state === "queued") pending.add(j.key || j.module);
+      state.pendingKeys = pending;
+    }catch(e){ /* backend yok — pending bilinmiyor, sessizce geç */ }
+  }
+
+  // Posture + kuyruğu birlikte tazele, sonra çiz. `announce`=true ise arka planda tamamlanan
+  // (queued/open/partial → active) geçişleri kutlar — kullanıcı butona bastıktan sonra ekrandan
+  // ayrılıp geri dönse bile, ya da ajan kuyruğu terminalden işlese bile zırh kuşanma anı KAÇMAZ.
+  let baseline = null; // önceki turdaki key → status (ilk yüklemede null → sahte kutlama yok)
+  async function syncAndRender(announce){
+    const prevBaseline = baseline;
+    await Promise.all([loadPosture(), loadJobs()]);
+    render();
+    const cur = {};
+    for (const l of state.layers) cur[l.key] = l.status;
+    for (const l of state.relics) cur[l.key] = l.status;
+    if (announce && prevBaseline){
+      for (const l of state.layers){
+        if (prevBaseline[l.key] && prevBaseline[l.key] !== "active" && l.status === "active"){
+          const after = computeMeasuredScore(state.layers, state.verification);
+          flash();
+          toast(`${l.icon} ${l.name} kuşanıldı — arka plandaki iş tamamlandı! Ölçülen güç ${after}/100.`);
+        }
+      }
+    }
+    baseline = cur;
   }
 
   function celebrate(layer, before, after){
@@ -164,17 +210,57 @@ export function mountSecurityKnight(target, options = {}){
   }
   function flash(){ const st = target.querySelector(".sk-stage"); const f = st && st.querySelector(".sk-flash");
     if (f){ f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); } }
+  // Genel amaçlı çekirdek: bu widget'ı kendi posture'unla (kendi self-check/attack-test'inle)
+  // entegre eden başka projeler için — "aktif ama kanıtsız" (hayalet) zırhı nasıl doğrularsın.
   const verifyQuestOf = l => ({
     why: l.verify?.needsTestHook
       ? "Aktif ama kara-kutu KANITLANAMIYOR (oracle-free tasarım — bot da insanla aynı yanıtı görür). Doğrulamak için backend test-modu kancası gerekir."
-      : "Aktif ama henüz saldırı testiyle kanıtlanmadı — bu yüzden hayalet zırh (tam puan almaz).",
+      : "Aktif ama henüz gerçek bir testle kanıtlanmadı — bu yüzden hayalet zırh (tam puan almaz).",
     steps: [
-      "Backend test-modu kancası ekle: son isteğin bot mu sayıldığını / e-posta gidip gitmediğini dönen bir uç.",
-      "attack-harness.mjs'i YETKİLİ staging'e koş (allow-list + attestation).",
-      "verify-cycle sonucu bu zırhı 'verified' yapsın → hayalet katılaşır, ölçülen güç yükselir.",
+      "Backend test-modu kancası ekle: son isteğin gerçekten bloklandığını/geçtiğini dönen bir uç.",
+      "O uca karşı gerçek bir doğrulama testi (self-check ya da yetkili saldırı testi) koş.",
+      "Sonucu backend'in verification endpoint'ine yaz → hayalet katılaşır, ölçülen güç yükselir.",
     ],
-    acceptance: ["Saldırı testi geçiyor → zırh KATI (doğrulandı), hayalet değil"],
+    acceptance: ["Doğrulama testi geçiyor → zırh KATI (doğrulandı), hayalet değil"],
   });
+
+  // Gerçek Warden bulgularını (şablon değil) çekmecede listeler.
+  function renderGapsList(findings){
+    if (!findings.length) return `<div class="sk-note">Bu boyutta P0/P1 bulgu yok — köprü zaten "active" işaretlemiş olmalı.</div>`;
+    return `<div class="sk-block"><div class="sk-block-h"><h4>🔎 Gerçek eksikler (${findings.length})</h4></div>
+      <ol class="sk-gaps">${findings.map(f => `<li>
+        <b>${SEVERITY_EMOJI[f.severity] || ""} [${esc(f.severity)}] ${esc(f.title)}</b>
+        ${f.evidence?.length ? `<div class="sk-muted">${f.evidence.map(e => esc(`${e.source}${e.location ? ":" + e.location : ""}`)).join(" · ")}</div>` : ""}
+        <div class="sk-ds">${esc(f.recommendation || "")}</div>
+      </li>`).join("")}</ol></div>`;
+  }
+
+  // Bir Warden boyutu için: hemen gerçek tarama tetikle, sonra gaps'i yokla (tıpkı tryLoop gibi).
+  async function scanAndPollGaps(key, onUpdate){
+    try { await apiFetch(scanUrl, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ module:key }) }); }
+    catch { onUpdate(null, "Backend'e ulaşılamadı — tarama tetiklenemedi."); return; }
+    let tries = 0;
+    const iv = setInterval(async () => {
+      try{
+        const r = await apiFetch(`${gapsUrl}?module=${encodeURIComponent(key)}`);
+        const data = await r.json();
+        if (data.findings && data.findings.length >= 0 && !data.note){ clearInterval(iv); onUpdate(data.findings, null); return; }
+      }catch{ /* henüz hazır değil */ }
+      if (++tries >= 10){ clearInterval(iv); onUpdate([], "Tarama zaman aşımına uğradı — 'Yeniden tara & doğrula' ile tekrar dene."); }
+    }, 1500);
+  }
+
+  // "Ajana kuyruğa al": zengin bir warden-fix görevi kuyruğa girer; SKILL.md prosedürü işler.
+  async function tryFixQueue(key){
+    const l = state.layers.find(x => x.key === key); if (!l) return;
+    try {
+      await apiFetch(fixQueueUrl, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ module:key }) });
+      toast(`🤖 ${l.name} kuyruğa alındı — ajan taze tarayıp paralel düzeltecek, doğrulanınca zırh kendiliğinden kuşanır.`);
+    } catch { toast("Backend'e ulaşılamadı — kuyruğa alınamadı."); }
+    state.pendingKeys.add(key); // iyimser: sunucu tarafında iş başladı, sonraki poll gerçek durumu teyit eder
+    render();
+    closeDrawer();
+  }
 
   // Hayalet zırhı doğrula (kanıtla).
   async function tryVerify(key){
@@ -216,9 +302,9 @@ export function mountSecurityKnight(target, options = {}){
           body: JSON.stringify({ key }) });
         const data = await r.json().catch(()=>({}));
         toast(data.queued === false ? "Bu güç zaten aktif."
-          : `🗡️ Görev kuyruğa alındı: ${l.name}. Ajan düzeltmeyi uygulayıp saldırı testini koşacak.`);
+          : `🗡️ Görev kuyruğa alındı: ${l.name}. Ajan düzeltmeyi uygulayıp saldırı testini koşacak — durumu aşağıda "işleniyor" olarak göreceksin.`);
       } catch { toast("Backend'e ulaşılamadı — görev kuyruğa alınamadı."); }
-      await loadPosture();
+      await Promise.all([loadPosture(), loadJobs()]);
       const after = computeScore(state.layers);
       render();
       if (state.layers.find(x=>x.key===key).status === "active") celebrate(l, before, after);
@@ -229,6 +315,10 @@ export function mountSecurityKnight(target, options = {}){
   function openDrawer(key, kind){
     const l = state.layers.find(x => x.key === key);
     const isVerify = kind === "verify";
+    const isWardenEquip = !isVerify && l.kind === "warden" && mode === "live";
+
+    if (isWardenEquip){ openWardenDrawer(l, key); return; }
+
     const q = isVerify ? verifyQuestOf(l) : (l.quest || {});
     const actLabel = isVerify
       ? (mode === "demo" ? "🔍 Doğrula (önizleme)" : "🔍 Doğrulamayı çalıştır")
@@ -268,6 +358,49 @@ export function mountSecurityKnight(target, options = {}){
     document.addEventListener("keydown", drawerEsc);
     toast(`🗺️ Görev açıldı: ${l.name} (+${l.weight} güç)`);
   }
+
+  // Warden-tarama boyutu için çekmece: açılışta hemen gerçek tarama tetikler, gerçek bulguları
+  // gösterir (şablon değil), "kendim düzelteceğim" / "ajana kuyruğa al" iki seçenek sunar.
+  function openWardenDrawer(l, key){
+    let lastFindings = null;
+    const wrap = document.createElement("div");
+    wrap.className = "sk-drawer";
+    wrap.innerHTML = `
+      <div class="sk-drawer-card">
+        <button class="sk-x" aria-label="kapat">✕</button>
+        <div class="sk-drawer-h"><span class="sk-drawer-ic">${l.icon}</span>
+          <div><b>${esc(l.name)}</b><div class="sk-muted">${esc(l.realName || "")} · +${l.weight} güç</div></div></div>
+        <p class="sk-why">${esc(l.desc)}</p>
+        <div class="sk-gaps-body">🔎 Taranıyor… (gerçek Warden taraması çalışıyor)</div>
+        <div class="sk-drawer-actions">
+          <button class="sk-btn ghost sk-fixself">🔧 Kendim düzelteceğim</button>
+          <button class="sk-btn sk-fixqueue">🤖 Ajana kuyruğa al (paralel düzelt)</button>
+          <button class="sk-btn ghost sk-cancel">Kapat</button>
+        </div>
+      </div>`;
+    target.appendChild(wrap);
+    const close = () => closeDrawer();
+    wrap.querySelector(".sk-x").onclick = close;
+    wrap.querySelector(".sk-cancel").onclick = close;
+    wrap.onclick = e => { if (e.target === wrap) close(); };
+    wrap.querySelector(".sk-fixqueue").onclick = () => tryFixQueue(key);
+    wrap.querySelector(".sk-fixself").onclick = async () => {
+      const fps = (lastFindings || []).map(f => f.fingerprint).filter(Boolean);
+      const text = `warden prompts --module ${key}${fps.length ? ` --fingerprint ${fps.join(",")}` : ""}\n(veya warden-report/remediation-playbook.md'deki ${key} bölümüne bak)`;
+      try { await navigator.clipboard.writeText(text); toast("📋 Komut panoya kopyalandı — kendi ajanına/terminaline yapıştır."); }
+      catch { toast("Kopyalanamadı — warden-report/remediation-playbook.md'ye bakabilirsin."); }
+    };
+    drawerEsc = e => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", drawerEsc);
+
+    scanAndPollGaps(key, (findings, err) => {
+      const body = wrap.querySelector(".sk-gaps-body");
+      if (!body) return; // çekmece kapatıldı
+      if (err){ body.innerHTML = `<div class="sk-note">⚠ ${esc(err)}</div>`; return; }
+      lastFindings = findings;
+      body.innerHTML = renderGapsList(findings);
+    });
+  }
   let drawerEsc = null;
   function closeDrawer(){
     const d = target.querySelector(".sk-drawer"); if (d) d.remove();
@@ -281,8 +414,9 @@ export function mountSecurityKnight(target, options = {}){
   };
   function abilityCard(l, isRelic){
     const vs = !isRelic && l.status === "active" ? verState(l, state.verification) : null;
+    const pending = !isRelic && l.status !== "active" && state.pendingKeys.has(l.key);
     let btn = "";
-    if (!isRelic){
+    if (!isRelic && !pending){
       if (l.status === "open" || l.status === "partial")
         btn = `<button class="sk-btn sk-act" data-key="${l.key}" data-kind="equip">⚒ Kuşan (+${l.weight})</button>`;
       else if (vs === "claimed")
@@ -290,13 +424,14 @@ export function mountSecurityKnight(target, options = {}){
       else if (vs === "failed")
         btn = `<button class="sk-btn sk-act" data-key="${l.key}" data-kind="equip">⚒ Onar</button>`;
     }
-    return `<div class="sk-card sk-ability ${l.status}${vs === "claimed" ? " ghosted" : ""}${vs === "failed" ? " dropped" : ""}">
+    return `<div class="sk-card sk-ability ${pending ? "processing" : l.status}${vs === "claimed" ? " ghosted" : ""}${vs === "failed" ? " dropped" : ""}">
       <div class="sk-ic">${l.icon}</div>
       <div class="sk-abody">
-        <div class="sk-nm">${esc(l.name)} <span class="sk-tag t-${l.status}">${TAG[l.status]}</span>${vs ? VBADGE[vs] : ""}</div>
+        <div class="sk-nm">${esc(l.name)} <span class="sk-tag ${pending ? "t-processing" : "t-" + l.status}">${pending ? "⏳ İŞLENİYOR" : TAG[l.status]}</span>${vs ? VBADGE[vs] : ""}</div>
         <div class="sk-ds">${esc(l.desc)}</div>
         ${vs === "claimed" ? `<div class="sk-note ghost">🔍 Aktif ama kanıtlanmadı — hayalet zırh. Doğrulanınca katılaşır.</div>` : ""}
         ${l.note ? `<div class="sk-note">⚠ ${esc(l.note)}</div>` : ""}
+        ${pending ? `<div class="sk-processing-note"><span class="dot"></span>Ajan düzeltmeyi uyguluyor ve test ediyor — bitince zırh kendiliğinden kuşanır.</div>` : ""}
         ${btn}
       </div></div>`;
   }
@@ -359,12 +494,14 @@ export function mountSecurityKnight(target, options = {}){
 
         <div class="sk-card sk-alarm">
           <div class="sk-alarm-h"><span class="sk-ping"></span> Zayıf Noktalar — Görev Çağrısı</div>
-          ${alarms.length ? alarms.map(({l,kind}) => `
-            <div class="sk-quest ${ALARM[kind].cls}">
+          ${alarms.length ? alarms.map(({l,kind}) => {
+            const pending = kind === "equip" && state.pendingKeys.has(l.key);
+            return `
+            <div class="sk-quest ${pending ? "" : ALARM[kind].cls}">
               <div class="sk-qi">${l.icon}</div>
-              <div class="sk-qt"><b>${esc(l.name)} <span class="sk-qk">${ALARM[kind].tag}</span></b><small>${esc(l.note || l.desc)}</small></div>
-              <button class="sk-btn sk-act" data-key="${l.key}" data-kind="${kind === "verify" ? "verify" : "equip"}">${ALARM[kind].btn}</button>
-            </div>`).join("")
+              <div class="sk-qt"><b>${esc(l.name)} <span class="sk-qk">${pending ? "⏳ İŞLENİYOR" : ALARM[kind].tag}</span></b><small>${pending ? "Ajan düzeltmeyi uyguluyor — bitince zırh kendiliğinden kuşanır." : esc(l.note || l.desc)}</small></div>
+              ${pending ? "" : `<button class="sk-btn sk-act" data-key="${l.key}" data-kind="${kind === "verify" ? "verify" : "equip"}">${ALARM[kind].btn}</button>`}
+            </div>`; }).join("")
             : `<div class="sk-quest done"><div class="sk-qi">🏆</div><div class="sk-qt"><b>Tüm zırhlar kuşanıldı ve doğrulandı!</b><small>Şövalyen tam teçhizatlı. Yalnızca izleme kaldı.</small></div></div>`}
         </div>
       </div>
@@ -418,11 +555,12 @@ export function mountSecurityKnight(target, options = {}){
     };
   }
 
-  // İlk yükleme: backend varsa oku, sonra çiz.
+  // İlk yükleme: backend varsa oku, sonra çiz (henüz baseline yok → kutlama tetiklenmez).
   render();
-  loadPosture().then(render);
-  // Canlı: periyodik yenileme (döngü/ajan posture'u güncelleyince şövalye kendiliğinden armalanır).
-  if (options.pollMs && options.endpoint) setInterval(() => { loadPosture().then(render); }, options.pollMs);
-  return { refresh: async () => { await loadPosture(); render(); },
+  syncAndRender(false);
+  // Canlı: periyodik yenileme — ajan kuyruğu arka planda (terminalden ya da /loop ile) işleyip
+  // posture'u güncellediğinde, şövalye kendiliğinden zırhlanır VE bunu kutlar (announce=true).
+  if (options.pollMs && options.endpoint) setInterval(() => { syncAndRender(true); }, options.pollMs);
+  return { refresh: async () => { await syncAndRender(true); },
     getScore: () => computeMeasuredScore(state.layers, state.verification) };
 }

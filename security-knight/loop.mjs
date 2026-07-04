@@ -1,15 +1,15 @@
 /**
- * WARDEN KNIGHT — the loop (Phase 4)
+ * WARDEN KNIGHT — the loop
  * =========================================================================
  * One command runs the whole cycle so the knight reflects reality end-to-end:
  *   1) Warden Scan       → warden-report/findings.json          (code security)
  *   2) warden-bridge     → state/warden-posture.json            (scan → armor)
- *   3) verify-cycle      → state/verification.json              (runtime defenses → measured)
- * After it runs, /api/combined/posture serves the fresh posture and the live panel arms up.
+ * After it runs, /api/warden/posture serves the fresh posture and the live panel arms up.
+ * A dimension only turns "active"+verified when Warden actually scanned it clean — never claimed.
  *
  * Run:  node loop.mjs                      (scans the parent Warden repo)
  *       node loop.mjs --target /path/proj  (scans another project)
- *       node loop.mjs --no-scan            (skip Warden scan; just re-bridge + re-verify)
+ *       node loop.mjs --no-scan            (skip Warden scan; just re-bridge from existing findings.json)
  * =========================================================================
  */
 import { execFileSync } from "node:child_process";
@@ -31,18 +31,14 @@ async function main(){
 
   // 1) Warden Scan
   if (!a["no-scan"]){
-    try { console.log("  1/3 Warden taraması…"); run("pnpm", ["warden", "scan", "--target", target], REPO); console.log("      ✓ tarandı"); }
+    try { console.log("  1/2 Warden taraması…"); run("pnpm", ["warden", "scan", "--target", target], REPO); console.log("      ✓ tarandı"); }
     catch (e){ console.log("      ⚠ tarama atlandı (pnpm/warden yok?) — mevcut findings.json kullanılacak"); }
-  } else console.log("  1/3 tarama atlandı (--no-scan)");
+  } else console.log("  1/2 tarama atlandı (--no-scan)");
 
   // 2) Bridge: scan → armor
-  try { console.log("  2/3 köprü (scan → zırh)…"); console.log("      " + run("node", ["warden-bridge.mjs", "--file", findings], ROOT).trim().split("\n").pop()); }
+  try { console.log("  2/2 köprü (scan → zırh)…"); console.log("      " + run("node", ["warden-bridge.mjs", "--file", findings], ROOT).trim().split("\n").pop()); }
   catch (e){ console.log("      ⚠ köprü başarısız: " + String(e.message).split("\n")[0]); }
 
-  // 3) verify-cycle: runtime defenses → measured
-  try { console.log("  3/3 doğrulama döngüsü…"); const out = run("node", ["verify-cycle.mjs", "--attack", "state/attack-results.json"], ROOT); console.log("      " + out.trim().split("\n")[0]); }
-  catch { try { run("node", ["verify-cycle.mjs"], ROOT); console.log("      ✓ self-check doğrulandı"); } catch { console.log("      ⚠ verify-cycle atlandı"); } }
-
-  console.log("✅ Döngü bitti — /api/combined/posture taze. Panel canlıysa şövalye kendini günceller.");
+  console.log("✅ Döngü bitti — /api/warden/posture taze. Panel canlıysa şövalye kendini günceller.");
 }
 main().catch(e => { console.error("loop hata:", e); process.exit(2); });

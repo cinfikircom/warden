@@ -1,19 +1,16 @@
 {
   "name": "security-knight",
   "version": "0.1.0",
-  "description": "Gamified, measured security-posture dashboard — your bot & abuse defense as a knight that arms up as you harden it.",
+  "description": "Gamified, measured security-posture dashboard — your Warden scan posture as a knight that arms up as you fix real findings.",
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server.mjs",
-    "verify": "node verify-cycle.mjs",
-    "attack": "node attack-harness.mjs",
-    "ci-check": "node ci-check.mjs --require honeypot,hmac,rlip,rlmail,rlverify",
     "check": "for f in *.mjs; do node --check \"$f\"; done"
   },
   "keywords": [
-    "security", "dashboard", "security-posture", "bot-defense", "anti-bot",
-    "abuse-prevention", "gamification", "appsec", "devsecops"
+    "security", "dashboard", "security-posture", "gamification", "appsec", "devsecops",
+    "sast", "vulnerability-management"
   ]
 }

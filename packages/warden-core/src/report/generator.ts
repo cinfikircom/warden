@@ -12,6 +12,7 @@ import { PARITY_EMOJI } from "../model/parity.ts";
 import type { ParityResult } from "../model/parity.ts";
 import { computeDelta, renderDeltaSection, historyLine } from "./delta.ts";
 import type { PreviousRun } from "./delta.ts";
+import { buildFindingPrompt, renderFindingPromptMd } from "./prompt.ts";
 import { COMPLIANCE_EMOJI, checklistScore } from "../model/compliance.ts";
 import type { ComplianceResult, Checklist } from "../model/compliance.ts";
 
@@ -257,30 +258,10 @@ function renderRemediationMd(findings: readonly Finding[], meta: ReportMeta): st
     return lines.join("\n");
   }
   for (const f of actionable) {
-    const risk = `${f.cvss !== undefined ? `CVSS ${f.cvss.toFixed(1)}` : f.severity}${f.exploitability ? ` / exploitability ${f.exploitability}` : ""}`;
-    lines.push(`## [${f.severity}] ${f.title} (\`${f.id}\`) — ${risk}`);
+    const p = buildFindingPrompt(f);
+    lines.push(`## [${p.severity}] ${p.title} (\`${p.id}\`) — ${p.risk}`);
     lines.push("");
-    lines.push("```text");
-    lines.push(`Görev: Aşağıdaki güvenlik bulgusunu düzelt (Warden denetimi).`);
-    lines.push(`Bulgu: ${f.title}`);
-    lines.push(`Şiddet/Risk: ${f.severity} · ${risk} · güven: ${f.confidence}`);
-    lines.push(`Kategori/Kontrol: ${f.category} (${f.check})`);
-    if (f.references && f.references.length > 0) lines.push(`Standart: ${f.references.join(", ")}`);
-    lines.push(`Etki: ${maskSecrets(f.impact)}`);
-    lines.push(`Etkilenen konum(lar):`);
-    if (f.evidence.length > 0) {
-      for (const e of f.evidence) lines.push(`  - ${e.source}${e.location ? `:${e.location}` : ""}`);
-    } else {
-      lines.push(`  - (rapora bakın)`);
-    }
-    lines.push(`Adımlar:`);
-    lines.push(`  1) Yukarıdaki konum(lar)ı aç ve sorunu doğrula.`);
-    lines.push(`  2) Şu yaklaşımı uygula: ${maskSecrets(f.recommendation)}`);
-    lines.push(`  3) Aynı sınıftaki diğer örnekleri de tara (grep ile yaygınlaştır).`);
-    lines.push(`Test/Kabul:`);
-    lines.push(`  - İlgili birim/entegrasyon testini ekle/güncelle; regresyon olmamalı.`);
-    lines.push(`  - Warden'i yeniden çalıştır: bu bulgu (\`${f.id}\`) "düzeltilen"e geçmeli (öncesi/sonrası delta).`);
-    lines.push("```");
+    lines.push(renderFindingPromptMd(p));
     lines.push("");
   }
   return lines.join("\n");

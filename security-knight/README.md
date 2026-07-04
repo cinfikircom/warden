@@ -5,11 +5,12 @@
 > Part of the **[Warden](../README.md)** security platform — the live, gamified dashboard.
 > _Warden Scan finds what to fix; the Knight proves your defenses hold._
 
-### Your bot & abuse defense — a knight that arms up the more you harden it.
+### Your project's real Warden-scan posture — a knight that arms up as you fix real findings.
 
-**A gamified, _measured_ security-posture dashboard.** Every defense you ship is a piece of armor.
-Equip and _prove_ it, and your knight grows from a plain recruit into a fully-armored champion.
-Miss one, and the panel raises the alarm — and shows you exactly how to fix it.
+**A gamified, _measured_ security-posture dashboard.** Every Warden scan dimension (SAST, Cloud,
+Compliance, K8s, DAST, …) is a piece of armor. Equip and _fix_ it, and your knight grows from a
+plain recruit into a fully-armored champion. Miss one, and the panel raises the alarm — showing
+you the actual bulgu, not a canned checklist.
 
 <img src="assets/knight-lv6.png" width="300" alt="Security Knight — fully armored" />
 
@@ -25,15 +26,14 @@ Miss one, and the panel raises the alarm — and shows you exactly how to fix it
 ## The idea
 
 Security dashboards usually show what you _claim_ is protected — a checklist of green ticks that
-quietly lie the moment a defense breaks. **Security Knight shows what's actually _measured_.**
+quietly lie the moment reality drifts. **Security Knight shows what's actually _measured_.**
 
-Each defense (honeypot, signed timestamps, rate-limits, silent bot handling, …) is an **armor piece**
-on a living knight. The knight’s power is computed from real signals — runtime self-checks and a
-black-box **attack harness** that actually tries to break each defense. A defense you can’t prove
-shows up as a **translucent “ghost” armor** worth less; a defense that breaks makes the armor **drop**
-and fires an alarm. Fixing a weakness is a **quest** with copy-paste steps.
+Each armor piece = a real Warden scan dimension. The knight's power comes from real signals — an
+actual `pnpm warden scan` of your actual code, not a flag someone flipped. A dimension with open
+P0/P1 findings is a **cracked, weak** piece of armor with a live quest ("here's exactly what's
+wrong, here's the fix"). A dimension Warden scanned clean turns **solid, verified** armor.
 
-> It can’t show a green tick it hasn’t earned.
+> It can't show a green tick it hasn't earned.
 
 <div align="center"><img src="assets/panel-combined.png" width="800" alt="Security Knight dashboard"/></div>
 
@@ -49,93 +49,99 @@ The character is generated art (via Magnific / Nano Banana Pro) — one consiste
 
 ## Features
 
-- 🛡️ **Measured posture, not claimed** — power derives from self-checks + attack tests, not a flag.
-- 👻 **Ghost armor** — active-but-unproven defenses render translucent and score only partial credit.
-- 💥 **Drift alarm** — if a defense stops working, its armor drops and the panel screams.
-- ⚔️ **Attack harness** — black-box bot simulation (timing side-channel, rate-limit, enum-parity, honeypot/replay).
-- 🎯 **Friendly-fire meter** — measures whether your defense is silently blocking _real users_ (the invisible cost of over-blocking).
-- 🤖 **Agent loop** — “Equip” queues a remediation job; an agent applies the fix, runs the attack test, and promotes the armor.
-- 🔒 **Hardened backend** — token auth, agent-only mutations, audit log, input validation, CORS lockdown.
-- 🧩 **Framework-agnostic & zero-dependency** — drop the ES-module widget into any app; Next.js routes included.
-- ✅ **CI regression guard** — a verified defense can never silently regress; CI fails if armor drops.
+- 🛡️ **Measured posture, not claimed** — power derives from a real `pnpm warden scan`, not a flag.
+- 🔎 **Real findings on click** — "Equip" triggers a live scan; the drawer shows the actual
+  severity/file:line/recommendation for that dimension, not template text.
+- 🤖 **Parallel-agent remediation** — "Queue for the agent" fans out independent findings to
+  sub-agents (`packages/warden-skill/SKILL.md`'s procedure), verifies via fingerprint delta, opens a PR.
+- 🔒 **Never faked** — armor only turns `active` via a real, clean re-scan (`warden-bridge.mjs`);
+  nothing writes "active" directly. Merging a fix doesn't auto-arm the knight — re-scan `main` does.
+- 🧩 **Framework-agnostic & zero-dependency** — drop the ES-module widget into any app.
+- 🌉 **One bridge, whole codebase** — `warden-bridge.mjs` maps Warden's entire scoreboard (A/B/C/D/
+  CLOUD/K8S/FE/AI) onto the same knight widget, no per-dimension custom code.
 
-## Two profiles — one knight
+## Real-scan "Equip"
 
-The same knight can visualize different postures:
+Clicking an armor piece no longer just queues an abstract job — it triggers a real, live scan and
+shows the actual findings:
 
-- **Bot-defense** (`index.html`) — honeypot, signed timestamps, rate-limits, silent handling…
-- **Whole Warden scan** (`index-warden.html`) — each **scan dimension** (SAST, Cloud, Compliance,
-  K8s, DAST…) becomes armor. Feed it with:
-  ```bash
-  pnpm warden scan --target <project>            # produces warden-report/findings.json
-  node warden-bridge.mjs --file ../warden-report/findings.json   # → state/warden-posture.json
-  ```
-  A dimension Warden scanned clean → **solid, verified** armor; a P0 dimension → an **open** quest.
-  This is the bridge that makes _Warden Scan_ and _Warden Knight_ speak the same language.
+1. Click an armor piece → the panel immediately `POST`s `/api/warden/scan` (a real `pnpm warden
+   scan`, then `warden-bridge.mjs` refreshes the whole board) and polls `GET /api/warden/gaps?module=<key>`
+   until the fresh findings for that dimension arrive.
+2. The drawer shows the **real** findings (severity, file:line, recommendation) — not template text.
+3. Two choices: **"🔧 Fix it myself"** (copies the exact `warden prompts --module <key> ...` command
+   / points at `remediation-playbook.md`) or **"🤖 Queue for the agent"** (`POST /api/warden/fix-queue`
+   — an agent, per `packages/warden-skill/SKILL.md`'s "Otomatik Düzeltme Prosedürü", fans out
+   parallel sub-agents for independent findings, verifies via fingerprint delta, opens a PR).
+4. The armor only ever turns `active` via a real, clean re-scan (`warden-bridge.mjs`) — never a
+   direct status write. Merging a fix doesn't auto-arm the knight; re-run the loop against `main`.
+
+`warden-equip.mjs` is the script behind this: `--module <key>` (full scan + write
+`state/warden-gaps/<key>.json`, used by "Equip") vs. `--module <key> --queue` (fast path — no
+rescan, just reads the existing findings via `warden prompts` and writes the job immediately, so
+the panel's "processing" indicator never races with a slow scan).
 
 ## Quick start
 
 ```bash
-cp .env.example .env          # set SK_ADMIN_TOKEN + SK_AGENT_TOKEN
-node server.mjs               # → http://127.0.0.1:8137/index.html
+cp .env.example .env          # set SK_ADMIN_TOKEN (optional; dev-open on localhost without it)
+node server.mjs               # → opens http://127.0.0.1:8137/ in your browser
+# or, from the repo root: pnpm knight
 ```
 
-Run the verification loop (turns claimed armor into _measured_ armor):
+The panel is the entry point from here on — "Equip", "queue for the agent", "re-scan", everything
+happens by clicking in the browser. No need to come back to the terminal. Set `SK_NO_OPEN=1` to
+disable the auto-open (e.g. in a headless/CI environment).
+
+Feed it a scan directly (or let "Equip"/the loop button do it for you):
 
 ```bash
-node verify-cycle.mjs --attack attack-results.json   # self-check + attack → verification.json
-```
-
-Run the attack harness against **your own** staging (authorization-gated):
-
-```bash
-node attack-harness.mjs --base https://staging.example.com \
-  --request /api/auth/request-code --authorize --allow staging.example.com --ack-emails
+pnpm warden scan --target <project>                            # → warden-report/findings.json
+node warden-bridge.mjs --file ../warden-report/findings.json    # → state/warden-posture.json
 ```
 
 ## How it works
 
 ```
- Panel "Equip"  →  POST /api/security/equip  →  job queue (state/jobs.jsonl)
-                                                     │
-                                    Agent runner (see AGENT-RUNNER.md)
-                                                     ▼
-        1) apply the fix in the target repo (as a PR)
-        2) run attack-harness against staging  (authorization-gated, non-destructive)
-        3) verify-cycle → POST /api/security/verification  (agent token)
-                                                     ▼
-             Panel re-reads posture → the armor turns solid, the knight levels up
+ Panel "Equip"  →  POST /api/warden/scan  →  real pnpm warden scan  →  warden-bridge.mjs
+                                                                            │
+                                                          state/warden-gaps/<module>.json
+                                                          (drawer shows REAL findings)
+                                                                            │
+                        "🔧 Fix it myself" ◄───────────────┬───────────────► "🤖 Queue for the agent"
+                                                            │                        │
+                                                            │           POST /api/warden/fix-queue
+                                                            │                        │
+                                                            │              SKILL.md procedure:
+                                                            │        parallel sub-agents → fix → verify
+                                                            │         (fingerprint delta) → open PR
+                                                            │                        │
+                                                            └──────────► merge → re-scan `main`
+                                                                                     │
+                                                                    warden-bridge.mjs re-derives status
+                                                                                     ▼
+                                                        Panel re-reads posture → armor turns solid,
+                                                                the knight levels up
 ```
 
-- **Measured score** = Σ(weight × factor): `verified` 1.0 · `claimed` (ghost) 0.6 · `open`/`failed` 0.
-- The panel shows both **measured** and **claimed** scores — the gap is your “unproven debt”.
-- **Friendly-fire**: a positive-path test ensures a legitimate user still gets through. Silent bot
-  defenses are great — but that same silence hides real users you might be dropping. Measure it.
+- **Measured score** = Σ(weight × factor), one factor per dimension: `active`+verified 1.0 ·
+  `partial` (P1/low score) 0.6 · `open` (P0 present) 0 · `optional` (not evaluated) 0.
+- A dimension can only reach `active` through `warden-bridge.mjs` reading a genuinely clean scan —
+  there's no button, endpoint, or manual override that sets it directly.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `index.html` · `knight.js` · `knight.css` | The widget (zero-dependency ES module). |
-| `posture.js` | **Single edit point** — the armor registry (layers + SVG fallback + quests). |
+| `posture-warden.js` | Armor registry — one entry per Warden scan module (A/B/C/D/CLOUD/K8S/FE/AI). |
+| `warden-bridge.mjs` | Reads `findings.json` → writes `state/warden-posture.json` (scan → armor). |
+| `warden-equip.mjs` | Backs the "Equip" flow — real scan + gaps file, or fast queue-only path. |
+| `loop.mjs` | Full cycle: scan → bridge, one command (used by the "re-scan" button). |
+| `server.mjs` | Local dev backend: posture / scan / gaps / fix-queue / job queue + auth + audit. |
 | `assets/knight-lv1..6.png` | Generated knight art (the progression stages). |
-| `server.mjs` | Local dev backend: posture / equip / verify / metrics + job queue + auth + audit. |
-| `attack-harness.mjs` | Black-box bot-simulation attack & test engine (authorization-gated). |
-| `verify-cycle.mjs` | Self-check + attack → `verification.json` (produces the _measured_ posture). |
-| `ci-check.mjs` | Regression guard — fails CI if a verified defense dropped. |
-| `api-example/nextjs-routes.ts` | Production API routes (session auth + pluggable store). |
-| `AGENT-RUNNER.md` · `GO-LIVE.md` | Autonomy contract & production checklist. |
-
-## Add your own armor
-
-Adding a new defense = **one object** in `posture.js` — no other file changes:
-
-```js
-{ key:"csrf", icon:"🧿", name:"Double Seal", realName:"CSRF token",
-  status:"open", weight:6, z:9, desc:"Double-submit CSRF token on state-changing requests.",
-  svg:`<path d="M.." fill="#.."/>`,           // armor piece drawn when active (SVG fallback)
-  quest:{ why:"...", steps:["..."], acceptance:["..."] } }
-```
+| `api-example/*.ts` | Production Next.js route sketch — `/api/warden/*` routes, file-store + Redis-store variants, serverless-vs-CI-triggered scan caveat. |
+| `GO-LIVE.md` | Production checklist — auth, HTTPS, PR gate, serverless scan caveat. |
 
 ## Integrate (Next.js / React)
 
@@ -146,36 +152,38 @@ export default function SecurityKnight() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     (async () => {
-      const [{ mountSecurityKnight }, { POSTURE }] = await Promise.all([
+      const [{ mountSecurityKnight }, { WARDEN_POSTURE }] = await Promise.all([
         import("@/security-knight/knight.js"),
-        import("@/security-knight/posture.js"),
+        import("@/security-knight/posture-warden.js"),
       ]);
-      mountSecurityKnight(ref.current!, { posture: POSTURE, endpoint: "/api/security/posture", mode: "live" });
+      mountSecurityKnight(ref.current!, { posture: WARDEN_POSTURE, endpoint: "/api/warden/posture", mode: "live", pollMs: 5000 });
     })();
   }, []);
   return <div ref={ref} />;
 }
 ```
 
-Copy `api-example/nextjs-routes.ts` into `app/api/security/*`, wire `requireAdmin()` to your auth,
-and **put the panel + API behind admin authentication**. See `GO-LIVE.md` for the full checklist.
+Put the panel + its API behind admin authentication in production — `server.mjs` is a **local dev**
+bridge only (see the file header). See `GO-LIVE.md` for the fuller checklist.
 
 ## Security & scope
 
-- The attack harness runs **only against targets you own** (attestation + allow-list + email
-  acknowledgement) — non-destructive, low-volume. No DoS, no brute-force.
-- Backend endpoints require auth; `POST /status`/`/verification` are **agent-token only**.
+- Scanning is **passive/read-only by default** (Warden's own authz gate — see root README);
+  active/DAST checks only run when a project explicitly opens `warden.authz.yml`.
+- Backend endpoints require auth (`SK_ADMIN_TOKEN`, dev-open on localhost without it).
+- Remediation always lands via branch + PR (never a direct commit to `main`) — see
+  `packages/warden-skill/SKILL.md`'s "Otomatik Düzeltme Prosedürü".
 - This tool is for **authorized self-assessment and defense**.
 
 ## Roadmap
 
-- [x] Measured posture + ghost armor + drift alarm
-- [x] Friendly-fire (false-positive) measurement
-- [x] CI regression guard
-- [x] Realistic generated knight art (6-stage progression)
-- [ ] Multi-endpoint fronts (one knight per protected route)
-- [ ] Live attack-spike auto-escalation (enable challenge, then relax)
-- [ ] Edge/WAF signals (JA4, IP reputation)
+- [x] Measured posture, driven entirely by real Warden scans (no claimed/manual state)
+- [x] Real findings in the "Equip" drawer, not template quest text
+- [x] Parallel-agent remediation procedure (fingerprint-verified, PR-gated)
+- [x] `api-example/` + `GO-LIVE.md` updated to the `/api/warden/*` routes
+- [ ] Multi-endpoint fronts (one knight per protected route/service)
+- [ ] Per-module fast re-verify (scoped scan without corrupting the other dimensions' scores)
+- [ ] CI-triggered scan path for serverless deploys (the `triggerScanViaCi` sketch in `nextjs-routes.ts` is unimplemented)
 
 > UI strings are currently Turkish (i18n-ready); the engine and API are language-neutral.
 

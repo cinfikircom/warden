@@ -4,28 +4,25 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex,nofollow" />
-<title>Güvenlik Şövalyesi — Demo</title>
+<title>Warden Knight — Security Posture</title>
 <link rel="stylesheet" href="./knight.css" />
 <style>body{margin:0;background:#efe4c9;padding:22px}.host{max-width:1120px;margin:0 auto}</style>
 </head>
 <body>
-  <!-- Widget bu elemana monte edilir -->
   <div class="host"><div id="kok"></div></div>
 
   <script type="module">
     import { mountSecurityKnight } from "./knight.js";
-    import { POSTURE } from "./posture.js";
+    import { WARDEN_POSTURE } from "./posture-warden.js";
 
-    // CANLI mod — backend'e bağlı (server.mjs çalışıyor olmalı).
-    // "Kuşan" → görevi kuyruğa düşürür; ajan işleyip posture'u güncelleyince zırh kalıcı belirir.
-    // Backend yoksa panel gömülü posture ile zarifçe açılır (yalnızca görüntüleme).
+    // The Knight visualizes the WHOLE Warden scan (findings.json → /api/warden/posture).
+    // "Equip" triggers a real scan (see README's "Real-scan Equip" section) — no canned demo data.
     mountSecurityKnight(document.getElementById("kok"), {
-      posture: POSTURE,
-      endpoint: "/api/security/posture",
+      posture: WARDEN_POSTURE,
+      endpoint: "/api/warden/posture",
       mode: "live",
+      pollMs: 5000, // background completions (queued fix → merged → re-armed) auto-celebrate
     });
-
-    // Sadece görsel önizleme istersen: mode:"demo" (backend gerekmez, "Kuşan" yerelde önizler).
   </script>
 </body>
 </html>

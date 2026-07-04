@@ -12,7 +12,8 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "warden": "tsx packages/warden-cli/src/index.ts"
+    "warden": "tsx packages/warden-cli/src/index.ts",
+    "knight": "node security-knight/server.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

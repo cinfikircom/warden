@@ -37,6 +37,10 @@ Bu proje Warden güvenlik & production-readiness denetimine kuruldu.
 ## Akış
 1) warden scan  2) report.md + remediation-playbook.md'yi oku  3) P0/P1 prompt'larını bir
 ajana ver, düzelt  4) tekrar çalıştır → öncesi/sonrası delta neyin düzeldiğini gösterir.
+
+## Warden Knight paneli varsa
+"Ajana kuyruğa al" ile kuyruğa düşen görevleri işlemek için SKILL.md'deki
+"Otomatik Düzeltme Prosedürü" bölümüne bak (paralel alt-ajan + fingerprint doğrulama + PR kapısı).
 `;
 
 function writeIfAbsent(path: string, content: string): "yazıldı" | "atlandı" {

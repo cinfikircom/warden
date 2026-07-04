@@ -1,62 +1,33 @@
 /**
- * Örnek Next.js (App Router) API rotası: app/api/security/posture/route.ts
+ * Örnek Next.js (App Router) API rotası: app/api/warden/posture/route.ts
  * =========================================================================
- * Zırh durumunun GERÇEK kaynağı burasıdır. Her savunma katmanının aktif olup
- * olmadığını GERÇEK sinyallerden türet: config bayrakları, env, feature-flag,
- * hatta canlı self-check. Panel bu JSON'u okuyup şövalyeyi çizer.
+ * Standalone, minimal örnek — yalnızca posture'u OKUR. Daha tam bir kurulum
+ * (gaps/jobs/scan/fix-queue rotaları dahil) için `nextjs-routes.ts`'e bak.
  *
- * Sözleşme:  GET -> { statuses: Record<key, "active"|"partial"|"open"|"optional">, metrics?: {...} }
+ * Zırh durumunun GERÇEK kaynağı `warden-bridge.mjs`'in bir Warden taramasından ürettiği
+ * `state/warden-posture.json`'dur — bu route hiçbir şeyi doğrudan yazmaz, yalnızca CI/agent'ın
+ * (`pnpm warden scan` → `node warden-bridge.mjs`) ürettiği sonucu okur.
+ *
+ * Sözleşme:  GET -> { statuses: Record<ModuleId, "active"|"partial"|"open"|"optional">,
+ *                      verification?: {...}, metrics?: {...} }
  * Bu ucu ADMIN kimlik doğrulaması arkasına koy (posture bilgisi hassastır).
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 export const dynamic = "force-dynamic";
 
-// Kod tabanındaki gerçek durumu yansıtacak şekilde bunları besle.
-// Örn. bir flag/env/DB veya doğrudan kodun o özelliği içerip içermediği.
-function readStatuses(): Record<string, "active" | "partial" | "open" | "optional"> {
-  const flags = {
-    honeypot: true,
-    hmac: true,
-    tokenSingleUse: false,       // ← nonce + bağlama uygulandığında true yap
-    rateLimitIp: true,
-    rateLimitEmail: true,
-    rateLimitVerify: true,
-    silentBot: true,
-    constantTimeResponse: false, // ← e-posta kuyruğa alındığında true yap
-    observability: false,        // ← metrik/alarm eklendiğinde true yap
-    enumParity: "partial" as const,
-  };
+const POSTURE_FILE = join(process.cwd(), "security-knight", "state", "warden-posture.json");
 
-  return {
-    honeypot:  flags.honeypot ? "active" : "open",
-    hmac:      flags.hmac ? "active" : "open",
-    token1x:   flags.tokenSingleUse ? "active" : "open",
-    rlip:      flags.rateLimitIp ? "active" : "open",
-    rlmail:    flags.rateLimitEmail ? "active" : "open",
-    rlverify:  flags.rateLimitVerify ? "active" : "open",
-    silent:    flags.silentBot ? "active" : "open",
-    consttime: flags.constantTimeResponse ? "active" : "open",
-    observ:    flags.observability ? "active" : "open",
-    enum:      flags.enumParity,
-    // opsiyonel kalıntılar:
-    globalcap: "optional", challenge: "optional", fairscale: "optional", a11y: "optional",
-  };
-}
-
-// Gerçek sayaçlarını (Redis/DB) buradan doldur.
-async function readMetrics() {
-  return {
-    "Püskürtülen saldırı": 348,
-    "Korunan istek": 1240,
-    "Ulaşan elçi (e-posta)": 892,
-    "Aktif tehdit": "Yok",
-    breakdown: { "Tuzağa düşen": 210, "Çok hızlı (<1,5sn)": 96, "Replay / eski damga": 25, "Rate-limit reddi": 17 },
-  };
+async function readPosture() {
+  try { return JSON.parse(await readFile(POSTURE_FILE, "utf8")); }
+  catch { return { statuses: {}, verification: { results: {} }, metrics: {}, note: "warden-bridge.mjs koşulmadı" }; }
 }
 
 export async function GET() {
-  // TODO: admin oturumu değilse 401 döndür.
-  const body = { statuses: readStatuses(), metrics: await readMetrics() };
+  // TODO: admin oturumu değilse 401 döndür (bkz. nextjs-routes.ts'teki requireAdmin).
+  const body = await readPosture();
   return new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });

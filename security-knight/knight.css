@@ -90,6 +90,12 @@
 .sk-tag{font-size:10px;font-weight:800;padding:2px 8px;border-radius:12px}
 .t-active{background:#d3efdf;color:#1d7a4f}.t-partial{background:#faead0;color:#9a6a12}
 .t-open{background:#f7d9dd;color:#a83143}.t-optional{background:#dfe9f8;color:#2f5c96}
+.t-processing{background:#dfe9f8;color:#2f5c96;animation:sk-shimmer 1.4s infinite}
+.sk-ability.processing{border-style:dashed}
+.sk-ability.processing .sk-ic{background:#eef3fb;border-color:#9db6e0;animation:sk-ping 1.2s infinite}
+.sk-processing-note{font-size:11.5px;color:#2f5c96;background:#eef3fb;border:1px dashed #9db6e0;
+  border-radius:8px;padding:5px 8px;margin-top:6px;display:flex;align-items:center;gap:6px}
+.sk-processing-note .dot{width:7px;height:7px;border-radius:50%;background:#3a6cc9;animation:sk-ping 1.2s infinite}
 /* doğrulama rozetleri */
 .sk-vtag{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:12px;letter-spacing:.02em}
 .v-ok{background:#d3efdf;color:#1d7a4f}
