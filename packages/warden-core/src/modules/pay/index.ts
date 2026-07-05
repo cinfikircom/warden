@@ -15,6 +15,8 @@ import { maskSecrets } from "../../secret/mask.ts";
  *     PAY-2  Webhook imza doğrulaması YOK → saldırgan "ödeme başarılı" olayını taklit eder
  *     PAY-3  Tutar istemciden geliyor (price tampering) → 1000₺'lik ürüne 1₺ ödenir
  *     PAY-5  Kart verisi (PAN/CVV) sunucuda işleniyor/loglanıyor (PCI ihlali)
+ *     PAY-12 3DS/SCA desteklemeyen legacy Charges API → AB kartlarında red / PSD2 ihlali
+ *     PAY-13 İade tutarı istemciden (over-refund) → orijinalden fazla/başkasının ödemesi iade
  *
  *   Güvenilirlik (para kaybı / "boşa düşen ödeme"):
  *     PAY-4  Charge oluşturma idempotency-key'siz → retry'da çift çekim
@@ -22,6 +24,7 @@ import { maskSecrets } from "../../secret/mask.ts";
  *     PAY-8  Webhook olay tekilleştirme (dedup) YOK → sağlayıcı retry'ında çift teslim/çift iade
  *     PAY-9  Kesinti/orphan ödeme koruması YOK → çekilmiş ama karşılığı verilmemiş ödeme (para boşa)
  *     PAY-10 Başarısız/asenkron ödeme olayı işlenmiyor → para limboda, iade/başarısızlık kaçar
+ *     PAY-11 Abonelik var ama dunning (başarısız yenileme) YOK → gelir sızıntısı / bedava erişim
  *
  * Yalnızca bir ödeme entegrasyonu tespit edilirse koşar (gürültüyü önler). Yokluk-temelli
  * kontroller (PAY-7/8/9/10) heuristiktir → düşük/orta güven, açıkça işaretlenir; yanlış-pozitif
@@ -64,6 +67,14 @@ const RECONCILE_SIG = /reconcil|mutabakat|settlement[\s\S]{0,40}(match|compare|v
 const PENDING_STATE = /\b(status|state|payment_?status|paymentStatus|odeme_?durumu)\b[\s\S]{0,20}["'](pending|awaiting|processing|authorized|created|initiated|bekliyor|beklemede)["']|enum[\s\S]{0,60}(PENDING|AUTHORIZED|CAPTURED)/i;
 const SWEEP_SIG = /(stale|orphan|uncaptured|expired|pending)[\s\S]{0,30}(payment|charge|intent|order)|sweep|cleanupPending|expirePending|reconcilePending|cancelStale/i;
 
+// --- Abonelik & dunning (PAY-11) ---
+const SUB_SIG = /subscriptions?\.create|customer\.subscription|createSubscription|\brecurring\b|billing_cycle|\bsubscription\b|\babonelik\b/i;
+const DUNNING_SIG = /invoice\.payment_failed|payment_action_required|past_due|dunning|customer\.subscription\.deleted|grace.?period|retry[\s\S]{0,20}(payment|invoice|charge)|mark[\s\S]{0,20}past_due|smart.?retries?/i;
+// --- 3DS / SCA (PAY-12): legacy Charges API SCA/3DS desteklemez ---
+const LEGACY_CHARGE = /\bcharges\.create\s*\(|\bCharge\.create\s*\(/i;
+// --- Refund (PAY-13) ---
+const REFUND_CREATE = /\brefunds\.create\s*\(|\bcreateRefund\b|\bRefund\.create\b|\.refund\s*\(/i;
+
 export interface PayFile {
   readonly path: string;
   readonly content: string;
@@ -80,6 +91,10 @@ export interface PayData {
   readonly hasSweep: boolean;
   /** Ara "pending/authorized" ödeme durumu persist ediliyor mu. */
   readonly hasPendingState: boolean;
+  /** Abonelik (recurring) kullanılıyor mu. */
+  readonly usesSubscriptions: boolean;
+  /** Başarısız yenileme / dunning işleme sinyali bulundu mu. */
+  readonly hasDunning: boolean;
 }
 
 const CLIENT_HINT = /(^|\/)(public|static|assets|dist|build|www|client|frontend|components|pages|app)\//i;
@@ -107,22 +122,26 @@ export function collectPayData(ctx: DetectContext): PayData {
   let hasReconciliation = false;
   let hasSweep = false;
   let hasPendingState = false;
+  let usesSubscriptions = false;
+  let hasDunning = false;
 
   for (const f of candidates) {
     const content = ctx.readFile(f);
     if (content === null || content.length > 1_000_000) continue;
     const isPay = PAY_CODE.test(content) || KEY_LIVE.test(content) || KEY_TEST.test(content) || KEY_ENV_HARDCODE.test(content);
-    // Mutabakat/sweep/pending sinyallerini yalnızca ödeme-bağlamı olan projede ara (gürültüyü azalt).
+    // Mutabakat/sweep/pending/abonelik sinyallerini yalnızca ödeme-bağlamı olan projede ara (gürültüyü azalt).
     if (RECONCILE_SIG.test(content)) hasReconciliation = true;
     if (SWEEP_SIG.test(content)) hasSweep = true;
     if (PENDING_STATE.test(content)) hasPendingState = true;
+    if (SUB_SIG.test(content)) usesSubscriptions = true;
+    if (DUNNING_SIG.test(content)) hasDunning = true;
     if (isPay) {
       usesPayments = true;
       const isClient = CLIENT_HINT.test(f) || /["']use client["']/.test(content) || /\.(jsx|tsx)$/i.test(f);
       files.push({ path: f, content, isClient });
     }
   }
-  return { usesPayments, providers: [...providers], files, hasReconciliation, hasSweep, hasPendingState };
+  return { usesPayments, providers: [...providers], files, hasReconciliation, hasSweep, hasPendingState, usesSubscriptions, hasDunning };
 }
 
 export function analyzePay(data: PayData): Finding[] {
@@ -146,6 +165,7 @@ export function analyzePay(data: PayData): Finding[] {
     const fileHandlesFailure = FAILURE_EVENT.test(content);
     const fileHasCharge = CHARGE_CREATE.test(content);
     const fileIdempotent = IDEMPOTENT.test(content);
+    const fileHasRefund = REFUND_CREATE.test(content);
 
     // PAY-2 / PAY-8 / PAY-10 — webhook handler bir kez (dosya düzeyi).
     if (fileHasWebhook && (PAY_CODE.test(content) || /signature/i.test(content))) {
@@ -194,6 +214,19 @@ export function analyzePay(data: PayData): Finding[] {
       }));
     }
 
+    // PAY-12 — 3DS/SCA: legacy Charges API SCA/3DS desteklemez (dosya düzeyi).
+    if (LEGACY_CHARGE.test(content)) {
+      const li = lines.findIndex((l) => LEGACY_CHARGE.test(l));
+      push(makeFinding({
+        id: `PAY-12-no-sca:${path}`, title: "3DS/SCA desteklemeyen legacy Charges API kullanılıyor",
+        severity: "P1", module: "PAY", check: "PAY-12", category: "Payment SCA / 3DS", confidence: "medium",
+        evidence: [{ type: "file", source: path, ...(li >= 0 ? { location: String(li + 1) } : {}), excerpt: "charges.create (legacy) — Strong Customer Authentication (3DS) akışını desteklemez" }],
+        impact: "Eski Charges API 3DS/SCA akışını yürütemez; AB kartlarında ödeme reddedilir veya PSD2/SCA ihlali oluşur, kimlik-doğrulamasız işlemler chargeback riskini artırır.",
+        recommendation: "PaymentIntents API'ye geç (otomatik SCA/3DS). Gerekiyorsa 3DS'i zorunlu kıl (ör. request_three_d_secure: 'any'); off-session akışlarında authentication_required'ı ele al.",
+        effort: "M", autoFixable: false, references: ["PSD2 SCA", "Stripe: PaymentIntents & 3DS"],
+      }));
+    }
+
     for (let i = 0; i < lines.length; i++) {
       const ln = lines[i] as string;
       const loc = String(i + 1);
@@ -220,16 +253,28 @@ export function analyzePay(data: PayData): Finding[] {
         }));
       }
 
-      // PAY-3 — tutar istemciden (price tampering).
+      // PAY-3 / PAY-13 — tutar istemciden. Refund bağlamında over-refund (PAY-13),
+      // diğer hallerde ödeme fiyat manipülasyonu (PAY-3).
       if (AMOUNT_FROM_CLIENT.test(ln) && (PAY_CODE.test(content) || fileHasCharge)) {
-        push(makeFinding({
-          id: `PAY-3-client-amount:${path}:${i + 1}`, title: "Ödeme tutarı istemci girdisinden alınıyor (fiyat manipülasyonu)",
-          severity: "P0", module: "PAY", check: "PAY-3", category: "Payment Amount Tampering", confidence: "medium",
-          evidence: [{ type: "file", source: path, location: loc, excerpt: ln.trim().slice(0, 160) }],
-          impact: "Tutar istemciden geldiği için saldırgan isteği değiştirip 1000₺'lik ürüne 1₺ (hatta 0) ödeyebilir.",
-          recommendation: "Tutarı ASLA istemciden alma. Sunucuda sepeti/ürünü DB'den yeniden fiyatla; para birimini de sunucuda sabitle ve doğrula.",
-          effort: "M", autoFixable: false, references: ["OWASP A04:2021", "CWE-840"],
-        }));
+        if (fileHasRefund) {
+          push(makeFinding({
+            id: `PAY-13-refund-amount:${path}:${i + 1}`, title: "İade tutarı istemci girdisinden alınıyor (over-refund / iade sahtekârlığı)",
+            severity: "P1", module: "PAY", check: "PAY-13", category: "Payment Refund Accounting", confidence: "medium",
+            evidence: [{ type: "file", source: path, location: loc, excerpt: ln.trim().slice(0, 160) }],
+            impact: "İade tutarı istemciden geldiği için saldırgan orijinal ödemeden fazlasını (ya da başkasının ödemesini) iade ettirebilir — doğrudan para kaybı.",
+            recommendation: "İade tutarını ASLA istemciden alma. Sunucuda orijinal charge/intent'i bul; iadeyi o tutarla sınırla; çağıranın o ödemeye sahip olduğunu doğrula; kısmi iadelerde kalan bakiyeyi muhasebeleştir.",
+            effort: "M", autoFixable: false, references: ["OWASP A04:2021", "CWE-840"],
+          }));
+        } else {
+          push(makeFinding({
+            id: `PAY-3-client-amount:${path}:${i + 1}`, title: "Ödeme tutarı istemci girdisinden alınıyor (fiyat manipülasyonu)",
+            severity: "P0", module: "PAY", check: "PAY-3", category: "Payment Amount Tampering", confidence: "medium",
+            evidence: [{ type: "file", source: path, location: loc, excerpt: ln.trim().slice(0, 160) }],
+            impact: "Tutar istemciden geldiği için saldırgan isteği değiştirip 1000₺'lik ürüne 1₺ (hatta 0) ödeyebilir.",
+            recommendation: "Tutarı ASLA istemciden alma. Sunucuda sepeti/ürünü DB'den yeniden fiyatla; para birimini de sunucuda sabitle ve doğrula.",
+            effort: "M", autoFixable: false, references: ["OWASP A04:2021", "CWE-840"],
+          }));
+        }
       }
 
       // PAY-5 — kart verisi loglama/sunucuda işleme (PCI).
@@ -258,6 +303,18 @@ export function analyzePay(data: PayData): Finding[] {
       impact: "Mutabakat olmadan sağlayıcıda çekilmiş ama DB'de kaydı olmayan (ya da tersi) ödemeler sessizce birikir — para/sipariş tutarsızlığı fark edilmez.",
       recommendation: "Periyodik (cron) bir mutabakat işi ekle: sağlayıcının charge/payout/balance kayıtlarını yerel sipariş/ödeme kayıtlarıyla karşılaştır; farkları alarma bağla.",
       effort: "L", autoFixable: false, references: ["PCI-DSS 10.6", "Ops: reconciliation"],
+    }));
+  }
+
+  // PAY-11 — abonelik var ama başarısız yenileme/dunning işlenmiyor.
+  if (data.usesSubscriptions && !data.hasDunning) {
+    push(makeFinding({
+      id: "PAY-11-no-dunning", title: "Abonelik var ama başarısız yenileme (dunning) işlenmiyor",
+      severity: "P2", module: "PAY", check: "PAY-11", category: "Payment Reliability", confidence: "low",
+      evidence: [{ type: "config", source: anchor, excerpt: "recurring/subscription kullanılıyor; invoice.payment_failed / past_due / dunning-retry işleme bulunamadı" }],
+      impact: "Yenileme ödemesi başarısız olduğunda (kart doldu/limit) gelir sessizce kaybolur ya da müşteri ödemediği halde erişimi sürer.",
+      recommendation: "invoice.payment_failed / payment_action_required / customer.subscription.deleted olaylarını işle; akıllı yeniden deneme (dunning) + grace period + erişim askıya alma kur.",
+      effort: "M", autoFixable: false, references: ["Stripe Billing: dunning", "Ops: revenue recovery"],
     }));
   }
 

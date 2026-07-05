@@ -74,7 +74,16 @@ describe("Modül PAY (ödeme güvenliği & güvenilirliği)", () => {
   it("webhook dedup yok → bulgu", () => { expect(got).toContain("PAY-8-webhook-no-dedup"); });
   it("kesinti/orphan ödeme koruması yok → bulgu", () => { expect(got).toContain("PAY-9-orphan-payment"); });
   it("başarısız/asenkron olay işlenmiyor → bulgu", () => { expect(got).toContain("PAY-10-webhook-no-failure"); });
+  it("abonelik var ama dunning yok → bulgu", () => {
+    expect(data.usesSubscriptions).toBe(true);
+    expect(got).toContain("PAY-11-no-dunning");
+  });
+  it("3DS/SCA desteklemeyen legacy Charges API → bulgu", () => { expect(got).toContain("PAY-12-no-sca"); });
+  it("iade tutarı istemciden (over-refund) → bulgu", () => { expect(got).toContain("PAY-13-refund-amount"); });
   it("ödeme entegrasyonu yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
-    expect(analyzePay({ usesPayments: false, providers: [], files: [], hasReconciliation: false, hasSweep: false, hasPendingState: false })).toHaveLength(0);
+    expect(analyzePay({
+      usesPayments: false, providers: [], files: [], hasReconciliation: false, hasSweep: false,
+      hasPendingState: false, usesSubscriptions: false, hasDunning: false,
+    })).toHaveLength(0);
   });
 });

@@ -148,6 +148,9 @@ bastırılabilir.
 | PAY-8 | Webhook olay tekilleştirme (dedup) yok (çift teslim/iade) | + | ✅ | CWE-696 |
 | PAY-9 | Kesinti/orphan ödeme koruması yok (çekilmiş ama karşılığı verilmemiş — para boşa) | + | ✅ | exactly-once fulfillment |
 | PAY-10 | Başarısız/asenkron ödeme olayı işlenmiyor (para limboda) | + | ✅ | Stripe event handling |
+| PAY-11 | Abonelik var ama dunning (başarısız yenileme) yok → gelir sızıntısı/bedava erişim | + | ✅ | Stripe Billing dunning |
+| PAY-12 | 3DS/SCA desteklemeyen legacy Charges API (AB kartı red / PSD2 ihlali) | + | ✅ | PSD2 SCA |
+| PAY-13 | İade tutarı istemciden (over-refund / iade sahtekârlığı) | + | ✅ | OWASP A04 · CWE-840 |
 
 > Ödeme entegrasyonu yoksa PAY hiç bulgu üretmez ve boyut "n/d" kalır.
 
