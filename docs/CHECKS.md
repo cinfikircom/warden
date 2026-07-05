@@ -117,6 +117,23 @@ tespit edilirse koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
 > BOLA (API1) → ACCESS/ACC-1 · Broken Authentication (API2) → AUTH · BFLA (API5) → ACCESS/ACC-4.
 > API yüzeyi yoksa modül hiç bulgu üretmez.
 
+## Modül PRIV — Veri Gizliliği & Denetim İzi (pasif) · Faz 6+
+
+CRM/ERP hassas kişisel veri (PII) yoğun — KVKK/GDPR uyumu. Yalnızca PII alanları tespit edilirse
+koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| PRIV-1 | PII loglanıyor (email/telefon/TCKN/IBAN log satırında) | + | ✅ | KVKK m.12 · GDPR Art.5 · CWE-532 |
+| PRIV-2 | PII URL/query string'inde (access-log + referrer sızıntısı) | + | ✅ | GDPR Art.5 · CWE-598 |
+| PRIV-3 | Yüksek-hassas alan at-rest şifreleme olmadan | + | ✅ | KVKK m.12 · GDPR Art.32 · CWE-311 |
+| PRIV-4 | Silme/anonimleştirme (KVKK/GDPR unutulma hakkı) yok | + | ✅ | KVKK m.7 · GDPR Art.17 |
+| PRIV-5 | Hassas veri erişim/değişiklik denetim izi (audit trail) yok | + | ✅ | GDPR Art.30 · ISO 27001 A.12.4 |
+
+> PII yoksa PRIV hiç bulgu üretmez.
+
+---
+
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2
 
 | ID | Kontrol | Faz | Durum |

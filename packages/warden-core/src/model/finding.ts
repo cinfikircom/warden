@@ -18,6 +18,7 @@ export const MODULES = [
   "PAY", // Ödeme Güvenliği & Güvenilirliği (webhook/tutar/mutabakat/orphan ödeme)
   "ACCESS", // Erişim Kontrolü & Kiracı İzolasyonu (OWASP #1: multi-tenant/authz/mass-assignment)
   "AUTH", // Kimlik & Oturum Sertleştirme (MFA/reset-token/cookie/JWT/brute-force/parola politikası)
+  "PRIV", // Veri Gizliliği & Denetim İzi (PII log/URL, at-rest şifreleme, KVKK/GDPR erasure, audit trail)
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];

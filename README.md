@@ -8,7 +8,7 @@
 that only levels up when a real re-scan proves the gap is truly closed.**
 No green tick it hasn't earned. No fix that breaks your code. No move made in the dark.
 
-[![tests](https://img.shields.io/badge/tests-250%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-257%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![zero deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
@@ -101,6 +101,7 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 - **Module ACCESS — Access control & tenant isolation** (passive): the OWASP #1 gap that breaks SaaS/CRM/ERP — **multi‑tenant isolation** (object fetched by client id with no `tenant_id`/`org_id` scope → cross‑tenant leak), **missing endpoint authorization** (state‑changing route with no auth middleware while the rest of the app authenticates), **mass assignment / over‑posting** (`req.body` written straight to a model → `is_admin` escalation), and **privileged/admin actions without a role check**. Multi‑stack (Express/Nest, Django, Rails, Laravel; Prisma/Sequelize/TypeORM/Mongoose). Only runs when a web/API + ORM surface is detected.
 - **Module AUTH — Identity & session hardening** (passive): account-takeover surface — **MFA/2FA absence**, **predictable password-reset tokens** (`Math.random`/`Date.now`), **insecure session cookies** (missing `httpOnly`/`secure`/`sameSite`), **JWT without expiry**, **login brute-force protection** (rate-limit/lockout), and **weak password policy** (hashing but no strength/pwned check). Absence checks scan comment-stripped code. Only runs when an auth surface is detected.
 - **Module API — API security (OWASP API Top 10)** (passive): the API-specific gaps beyond ACCESS/injection — **excessive data exposure** (`SELECT *` / returning every column), **no rate limiting**, **unbounded queries** (`findMany`/`findAll` with no pagination → whole table), **verbose errors** (stack traces leaked to the client), and **GraphQL depth/complexity limits**. Only runs when an HTTP/API surface is detected.
+- **Module PRIV — Data privacy & audit trail** (passive): the compliance layer for CRM/ERP holding personal data (KVKK/GDPR) — **PII in logs** (email/phone/national‑id/IBAN), **PII in URLs/query strings**, **high‑sensitive fields without at‑rest encryption**, **no erasure / right‑to‑be‑forgotten** mechanism, and **no audit trail** of who accessed/changed sensitive records. Only runs when PII fields are detected.
 - **Module PAY — Payment security & reliability** (passive): recognizes a payment integration (Stripe, PayPal, Braintree, Adyen, Razorpay, Mollie, iyzico, craftgate, PayU…) and audits the money path — **webhook signature verification** (forged “payment succeeded”), **client‑set amount** (price tampering), **idempotency** (double charge on retry), **card data (PAN/CVV) in logs/server**, **reconciliation (mutabakat) cron** presence, **orphan/interrupted payment** handling (charged‑but‑not‑fulfilled, uncaptured auths), **failed/async event** handling, **subscription dunning** (failed‑renewal recovery), **3DS/SCA** enforcement (legacy Charges API can’t do SCA), and **refund accounting** (client‑set refund amount → over‑refund). Only runs when a payment integration is detected.
 - **Module C — DAST** (active, **authorization‑gated**): exposed files (`/.env`, `/.git`, swagger), security headers + TLS, open admin panels, rate‑limit probing, cookie flags, sensitive port inventory.
 
@@ -233,7 +234,7 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 250 tests passing; 16 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+Actively developed. 257 tests passing; 17 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
 See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 Ideas, checks for new stacks, and bug reports are all welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).

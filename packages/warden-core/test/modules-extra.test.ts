@@ -8,6 +8,7 @@ import { collectPayData, analyzePay } from "../src/modules/pay/index.ts";
 import { collectAccessData, analyzeAccess } from "../src/modules/access/index.ts";
 import { collectAuthData, analyzeAuth } from "../src/modules/auth/index.ts";
 import { collectApiData, analyzeApi } from "../src/modules/api/index.ts";
+import { collectPrivData, analyzePriv } from "../src/modules/priv/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -153,5 +154,25 @@ describe("Modül API (OWASP API Top 10)", () => {
   it("GraphQL limit yok → API-6", () => { expect(got).toContain("API-6-graphql-no-limit"); });
   it("API yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeApi({ usesApi: false, hasRateLimit: false, usesGraphql: false, hasGraphqlLimit: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül PRIV (veri gizliliği & denetim izi)", () => {
+  const data = collectPrivData(createFsContext(fix("vuln-priv")));
+  const findings = analyzePriv(data);
+  const got = ids(findings);
+
+  it("PII + yüksek-hassas alan + web tespit edilir", () => {
+    expect(data.usesPii).toBe(true);
+    expect(data.hasSensitiveHigh).toBe(true);
+    expect(data.usesWeb).toBe(true);
+  });
+  it("PII loglanıyor → PRIV-1", () => { expect(got).toContain("PRIV-1-pii-in-logs"); });
+  it("PII URL'de → PRIV-2", () => { expect(got).toContain("PRIV-2-pii-in-url"); });
+  it("at-rest şifreleme yok → PRIV-3", () => { expect(got).toContain("PRIV-3-no-encryption-at-rest"); });
+  it("erasure yok → PRIV-4", () => { expect(got).toContain("PRIV-4-no-erasure"); });
+  it("audit trail yok → PRIV-5", () => { expect(got).toContain("PRIV-5-no-audit-trail"); });
+  it("PII yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzePriv({ usesPii: false, hasSensitiveHigh: false, hasEncryption: false, hasErasure: false, hasAudit: false, usesWeb: false, files: [] })).toHaveLength(0);
   });
 });

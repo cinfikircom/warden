@@ -1,0 +1,9 @@
+// Customer records with sensitive personal data stored as plain columns.
+model Customer {
+  id       String @id @default(cuid())
+  email    String
+  phone    String
+  tckimlik String
+  iban     String
+  address  String
+}

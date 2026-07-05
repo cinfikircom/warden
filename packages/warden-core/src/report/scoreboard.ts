@@ -30,6 +30,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   PAY: "Payment Security & Reliability",
   ACCESS: "Access Control & Tenant Isolation",
   AUTH: "Identity & Session Hardening",
+  PRIV: "Data Privacy & Audit Trail",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */

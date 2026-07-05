@@ -66,6 +66,8 @@ export const WARDEN_POSTURE = {
       desc:"MFA/2FA absence, predictable reset tokens, insecure session cookies, JWT without expiry, login brute-force protection, weak password policy.", quest:q("Identity & session") },
     { key:"API", kind:"warden", icon:"📡", name:"Herald's Horn", realName:"API security (OWASP API Top 10)", weight:9, z:8, status:"open",
       desc:"Excessive data exposure (SELECT *), missing rate limiting, unbounded queries (no pagination), verbose errors, GraphQL depth/complexity limits.", quest:q("API security") },
+    { key:"PRIV", kind:"warden", icon:"📖", name:"Chronicle Ledger", realName:"Data privacy & audit trail", weight:10, z:8, status:"open",
+      desc:"PII in logs/URLs, at-rest encryption for high-sensitive fields, KVKK/GDPR erasure (right to be forgotten), audit trail of who accessed/changed data.", quest:q("Data privacy & audit") },
     { key:"CLOUD", kind:"warden", icon:"☁️", name:"Sky Ward", realName:"Cloud / IaC", weight:12, z:7, status:"open",
       desc:"Public buckets, IAM wildcards, open security groups, public DBs (Terraform).", quest:q("Cloud/IaC") },
     { key:"K8S", kind:"warden", icon:"⚓", name:"Fleet Anchor", realName:"Kubernetes", weight:8, z:6, status:"open",
