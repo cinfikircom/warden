@@ -18,7 +18,7 @@
  */
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { readFile, appendFile } from "node:fs/promises";
+import { readFile, appendFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, extname, resolve } from "node:path";
@@ -44,6 +44,10 @@ const MIME = { ".html":"text/html", ".css":"text/css", ".js":"text/javascript",
 
 const ipOf = req => (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
 const isLocal = req => ["127.0.0.1", "::1"].includes(ipOf(req));
+
+// Modül anahtarı istemciden gelir ve hem CLI argümanına hem gaps DOSYA ADINA girer.
+// Yalnız büyük harf/rakam/altçizgi kabul et — path traversal (../) ve arg enjeksiyonunu keser.
+const validModule = m => typeof m === "string" && /^[A-Z0-9_]{1,20}$/.test(m);
 
 async function audit(req, event, extra = {}){
   const line = JSON.stringify({ ts: new Date().toISOString(), ip: ipOf(req), method: req.method,
@@ -116,8 +120,14 @@ const server = createServer(async (req, res) => {
     // bulgularını üretir. Detached; panel /api/warden/gaps'i yoklar.
     if (path === "/api/warden/scan" && req.method === "POST"){
       const { module } = await body(req);
-      if (!module) return json(res, 400, { error:"module gerekli" });
+      if (!validModule(module)) return json(res, 400, { error:"geçerli module gerekli (A-Z0-9_)" });
       try {
+        // Bayat gaps'i taramaya başlarken GEÇERSİZ kıl: aksi halde büyük bir hedef projede
+        // (tarama uzun sürer) ilk poll önceki taramanın dosyasını anında "hazır" sanıp bayat
+        // veri gösterir. Marker'ın `note` alanı, taze dosya yazılana dek poll'u bekletir.
+        await mkdir(GAPS_DIR, { recursive: true });
+        await writeFile(join(GAPS_DIR, `${module}.json`),
+          JSON.stringify({ module, scanning:true, findings:[], note:"taranıyor…", startedAt:new Date().toISOString() }));
         const child = spawn("node", ["warden-equip.mjs", "--module", module, ...targetArgs], { cwd: ROOT, detached: true, stdio: "ignore" });
         child.unref();
         await audit(req, "warden_scan_started", { module });
@@ -127,14 +137,14 @@ const server = createServer(async (req, res) => {
     // O modülün en son taramadan gelen gerçek bulguları — çekmece bunu gösterir (şablon değil).
     if (path === "/api/warden/gaps" && req.method === "GET"){
       const module = url.searchParams.get("module");
-      if (!module) return json(res, 400, { error:"module gerekli" });
+      if (!validModule(module)) return json(res, 400, { error:"geçerli module gerekli (A-Z0-9_)" });
       try { return json(res, 200, JSON.parse(await readFile(join(GAPS_DIR, `${module}.json`), "utf8"))); }
       catch { return json(res, 200, { module, findings:[], note:"henüz taranmadı — önce /api/warden/scan çalıştır" }); }
     }
     // "Ajana kuyruğa al": zengin bir warden-fix görevi ekler (SKILL.md prosedürü işler).
     if (path === "/api/warden/fix-queue" && req.method === "POST"){
       const { module } = await body(req);
-      if (!module) return json(res, 400, { error:"module gerekli" });
+      if (!validModule(module)) return json(res, 400, { error:"geçerli module gerekli (A-Z0-9_)" });
       try {
         const child = spawn("node", ["warden-equip.mjs", "--module", module, "--queue", ...targetArgs], { cwd: ROOT, detached: true, stdio: "ignore" });
         child.unref();

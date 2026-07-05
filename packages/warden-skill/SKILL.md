@@ -157,10 +157,17 @@ periyodik çalıştığında) izlenecek prosedürdür.**
 
 ## Kontrol kataloğu
 
-Tüm kontroller (Modül A parity · B SAST · C DAST · D uyum + OWASP Top 10 / ASVS / PCI-DSS /
-API / Cloud / K8s / Frontend / AI genişletmeleri) ve durumları: `docs/CHECKS.md`.
+Tüm kontroller ve durumları: `docs/CHECKS.md`. Modüller:
+- **A** parity/deployment · **B** SAST · **C** DAST (yetki kapılı) · **D** uyum (PCI-DSS/KVKK-GDPR)
+- **CLOUD** IaC · **K8S** manifest · **AI** LLM güvenliği
+- **PAY** ödeme güvenliği & güvenilirliği · **ACCESS** erişim kontrolü & kiracı izolasyonu ·
+  **AUTH** kimlik & oturum · **API** OWASP API Top 10 · **PRIV** veri gizliliği & denetim izi ·
+  **WEB** CSRF/clickjacking/başlıklar · **FLOW** iş-akışı & veri bütünlüğü · **EMAIL** e-posta
+  güvenliği · **UPLOAD** dosya yükleme güvenliği
+
+Her modül yalnız ilgili yüzey (ödeme/mailer/yükleme/IaC/…) tespit edilince koşar; gürültü üretmez.
 
 ## Durum
 
-🚧 Faz 0 (iskelet) tamam: yetki kapısı + bulgu modeli + boş-ama-geçerli rapor.
-Modüller sonraki fazlarda etkinleşir (bkz. iş emri §7).
+✅ Tüm modüller canlı (pasif varsayılan, C yetki kapılı). `warden scan` tam postür + skor tablosu +
+delta üretir; Warden Knight paneli bunu zırh olarak görselleştirir. Kurulum: `warden init --target <proje>`.

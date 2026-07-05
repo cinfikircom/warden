@@ -239,17 +239,24 @@ export function mountSecurityKnight(target, options = {}){
   }
 
   // Bir Warden boyutu için: hemen gerçek tarama tetikle, sonra gaps'i yokla (tıpkı tryLoop gibi).
-  async function scanAndPollGaps(key, onUpdate){
+  // onTick(saniye): tarama sürerken geçen süreyi gösterir. Bütçe büyük hedef projeleri de kapsar
+  // (~90s); backend taramaya başlarken bayat gaps'i marker'la geçersiz kıldığı için poll asla
+  // önceki taramanın sonucunu "hazır" sanmaz (bkz. server.mjs /api/warden/scan).
+  async function scanAndPollGaps(key, onUpdate, onTick){
     try { await apiFetch(scanUrl, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ module:key }) }); }
     catch { onUpdate(null, "Backend'e ulaşılamadı — tarama tetiklenemedi."); return; }
+    const started = Date.now();
     let tries = 0;
+    const MAX_TRIES = 60; // 60 × 1.5s = 90s
     const iv = setInterval(async () => {
       try{
         const r = await apiFetch(`${gapsUrl}?module=${encodeURIComponent(key)}`);
         const data = await r.json();
-        if (data.findings && data.findings.length >= 0 && !data.note){ clearInterval(iv); onUpdate(data.findings, null); return; }
+        // Taze sonuç = marker DEĞİL (note yok, scanning yok). Bayat/marker dosya `note` taşır → beklemeye devam.
+        if (!data.note && !data.scanning && Array.isArray(data.findings)){ clearInterval(iv); onUpdate(data.findings, null); return; }
       }catch{ /* henüz hazır değil */ }
-      if (++tries >= 10){ clearInterval(iv); onUpdate([], "Tarama zaman aşımına uğradı — 'Yeniden tara & doğrula' ile tekrar dene."); }
+      if (onTick) onTick(Math.round((Date.now() - started) / 1000));
+      if (++tries >= MAX_TRIES){ clearInterval(iv); onUpdate([], "Tarama zaman aşımına uğradı — 'Tüm sistemi tara & raporla' ile tekrar dene."); }
     }, 1500);
   }
 
@@ -402,6 +409,9 @@ export function mountSecurityKnight(target, options = {}){
       if (err){ body.innerHTML = `<div class="sk-note">⚠ ${esc(err)}</div>`; return; }
       lastFindings = findings;
       body.innerHTML = renderGapsList(findings);
+    }, (secs) => {
+      const body = wrap.querySelector(".sk-gaps-body");
+      if (body) body.innerHTML = `🔎 Taranıyor… (gerçek Warden taraması çalışıyor · ${secs}s)`;
     });
   }
   let drawerEsc = null;
