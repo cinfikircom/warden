@@ -111,6 +111,7 @@ export function mountSecurityKnight(target, options = {}){
     metrics: options.metrics || posture.metrics || {},
     verification: {},   // key → { state:"verified|claimed|failed", method, detail } (backend'den)
     pendingKeys: new Set(), // kuyrukta "queued" bekleyen görevlerin key'leri — arka planda iş sürüyor göstergesi
+    hasPosture: undefined,  // backend gerçek bir taramadan posture üretmiş mi? (ilk-açılış otomatik-taraması için)
     original: null,
   };
 
@@ -125,13 +126,15 @@ export function mountSecurityKnight(target, options = {}){
     if (!options.endpoint) return;
     try{
       const res = await apiFetch(options.endpoint);
-      const data = await res.json(); // { statuses: { key: "active"|... }, metrics?: {...} }
+      const data = await res.json(); // { statuses: { key: "active"|... }, metrics?: {...}, note? }
       const map = data.statuses || data;
+      // Gerçek bir tarama üretilmiş mi? (henüz taranmamışsa backend `note` döner, statuses boştur)
+      state.hasPosture = !data.note && !!map && Object.keys(map).length > 0;
       for (const l of state.layers) if (map[l.key]) l.status = map[l.key];
       for (const l of state.relics) if (map[l.key]) l.status = map[l.key];
       if (data.metrics) state.metrics = data.metrics;
       if (data.verification) state.verification = data.verification.results || data.verification;
-    }catch(e){ /* offline/demo → gömülü posture */ }
+    }catch(e){ state.hasPosture = false; /* offline/demo → gömülü posture */ }
   }
 
   // Kuyrukta bekleyen ("queued") görevler → "arka planda işleniyor" göstergesi.
@@ -555,8 +558,15 @@ export function mountSecurityKnight(target, options = {}){
   }
 
   // İlk yükleme: backend varsa oku, sonra çiz (henüz baseline yok → kutlama tetiklenmez).
+  // Henüz hiç taranmamışsa (taze kurulum) → sistem kendiliğinden tam taramayı başlatır:
+  // kişi hiçbir butona basmadan eksikler tespit edilir ve şövalye gerçek sonuca göre giydirilir.
   render();
-  syncAndRender(false);
+  syncAndRender(false).then(() => {
+    if (mode === "live" && loopEnabled && options.autoScan !== false && state.hasPosture === false){
+      toast("🔎 İlk tarama otomatik başladı — sistem tüm projeyi tarıyor, eksikleri çıkarıyor…");
+      tryLoop();
+    }
+  });
   // Canlı: periyodik yenileme — ajan kuyruğu arka planda (terminalden ya da /loop ile) işleyip
   // posture'u güncellediğinde, şövalye kendiliğinden zırhlanır VE bunu kutlar (announce=true).
   if (options.pollMs && options.endpoint) setInterval(() => { syncAndRender(true); }, options.pollMs);
