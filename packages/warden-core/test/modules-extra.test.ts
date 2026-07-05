@@ -7,6 +7,7 @@ import { collectAiData, analyzeAi } from "../src/modules/ai/index.ts";
 import { collectPayData, analyzePay } from "../src/modules/pay/index.ts";
 import { collectAccessData, analyzeAccess } from "../src/modules/access/index.ts";
 import { collectAuthData, analyzeAuth } from "../src/modules/auth/index.ts";
+import { collectApiData, analyzeApi } from "../src/modules/api/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -133,5 +134,24 @@ describe("Modül AUTH (kimlik & oturum sertleştirme)", () => {
   it("zayıf parola politikası → AUTH-6", () => { expect(got).toContain("AUTH-6-weak-password-policy"); });
   it("kimlik yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeAuth({ usesAuth: false, hasLogin: false, hasMfa: false, hasBruteForce: false, hasPasswordHash: false, hasPasswordStrength: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül API (OWASP API Top 10)", () => {
+  const data = collectApiData(createFsContext(fix("vuln-api")));
+  const findings = analyzeApi(data);
+  const got = ids(findings);
+
+  it("API + GraphQL yüzeyi tespit edilir", () => {
+    expect(data.usesApi).toBe(true);
+    expect(data.usesGraphql).toBe(true);
+  });
+  it("SELECT * (aşırı ifşa) → API-1", () => { expect(got).toContain("API-1-select-star"); });
+  it("rate limit yok → API-2", () => { expect(got).toContain("API-2-no-rate-limit"); });
+  it("sınırsız findMany → API-3", () => { expect(got).toContain("API-3-unbounded-query"); });
+  it("ayrıntılı hata istemciye → API-4", () => { expect(got).toContain("API-4-verbose-error"); });
+  it("GraphQL limit yok → API-6", () => { expect(got).toContain("API-6-graphql-no-limit"); });
+  it("API yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeApi({ usesApi: false, hasRateLimit: false, usesGraphql: false, hasGraphqlLimit: false, files: [] })).toHaveLength(0);
   });
 });

@@ -1,0 +1,9 @@
+{
+  "name": "vuln-api-fixture",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.0",
+    "@prisma/client": "^5.0.0",
+    "@apollo/server": "^4.0.0"
+  }
+}

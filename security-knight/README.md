@@ -149,7 +149,7 @@ node warden-bridge.mjs --file ../warden-report/findings.json    # → state/ward
 | File | Role |
 |---|---|
 | `index.html` · `knight.js` · `knight.css` | The widget (zero-dependency ES module). |
-| `posture-warden.js` | Armor registry — one entry per Warden scan module (A/B/C/D/CLOUD/K8S/FE/AI/PAY/ACCESS/AUTH). |
+| `posture-warden.js` | Armor registry — one entry per Warden scan module (A/B/C/D/CLOUD/K8S/FE/AI/PAY/ACCESS/AUTH/API). |
 | `warden-bridge.mjs` | Reads `findings.json` → writes `state/warden-posture.json` (scan → armor). |
 | `warden-equip.mjs` | Backs the "Equip" flow — real scan + gaps file, or fast queue-only path. |
 | `loop.mjs` | Full cycle: scan → bridge, one command (used by the "re-scan" button). |

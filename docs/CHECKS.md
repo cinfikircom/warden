@@ -101,15 +101,21 @@ OWASP açıklarını **açık isimle** bulur ve ASVS kontrollerine eşler. Rapor
 | K8S-4 | Exposed secrets (env/manifest) | + | ✅ | CIS K8s 5.4 |
 | K8S-5 | Ingress misconfig (TLS yok) | + | ✅ | — |
 
-## Modül API — OWASP API Security Top 10 (pasif + yetki kapılı aktif) · Faz 2/4
+## Modül API — API Güvenliği (OWASP API Top 10, pasif) · Faz 6+
 
-| ID | Kontrol | Faz | Durum |
-|----|---------|:---:|:-----:|
-| API1 | Broken Object Level Authorization (BOLA/IDOR) | 2 | ⏳ |
-| API2 | Broken Authentication | 2 | ⏳ |
-| API3 | Excessive Data Exposure | 2 | ⏳ |
-| API4 | Lack of Resources & Rate Limiting | 4 | ⏳ |
-| API5 | Broken Function Level Authorization | 2 | ⏳ |
+ACCESS (BOLA/authz) ve B (injection) dışında kalan API-özgü riskler. Yalnızca bir HTTP/API yüzeyi
+tespit edilirse koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| API-1 | Aşırı veri ifşası: SELECT * / tüm kolonlar dönüyor | + | ✅ | OWASP API3 · CWE-213 |
+| API-2 | API geneli hız sınırı (rate limit) yok | + | ✅ | OWASP API4 · CWE-770 |
+| API-3 | Sınırsız sorgu: findMany/findAll limit/pagination olmadan | + | ✅ | OWASP API4 · CWE-770 |
+| API-4 | Ayrıntılı hata/stack trace istemciye dönüyor | + | ✅ | OWASP API8 · CWE-209 |
+| API-6 | GraphQL derinlik/karmaşıklık limiti yok | + | ✅ | OWASP API4 · CWE-770 |
+
+> BOLA (API1) → ACCESS/ACC-1 · Broken Authentication (API2) → AUTH · BFLA (API5) → ACCESS/ACC-4.
+> API yüzeyi yoksa modül hiç bulgu üretmez.
 
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2
 
