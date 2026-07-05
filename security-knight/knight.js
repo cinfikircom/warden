@@ -466,7 +466,7 @@ export function mountSecurityKnight(target, options = {}){
     <div class="sk">
       <div class="sk-top">
         <div><div class="sk-title">⚔️ Güvenlik Şövalyesi</div>
-          <div class="sk-sub"><b>Faz 1:</b> tüm sistemini tara, gerçek açıkları gör · <b>Faz 2:</b> ajan sıfır zararla kapatsın — her düzeltme bir zırhı kuşandırır.</div></div>
+          <div class="sk-sub"><b>Faz 1:</b> Sur'unu tara, gedikleri gör · <b>Faz 2:</b> ajan sıfır zararla onarsın — kapanan her gedik bir zırha dönüşür.</div></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           ${loopEnabled ? `<button class="sk-btn sk-rescan">🔎 Tüm sistemi tara & raporla</button>` : ""}
           <button class="sk-btn ghost sk-reset" style="display:${state.original ? "" : "none"}">↺ Gerçek duruma dön</button>
@@ -496,7 +496,7 @@ export function mountSecurityKnight(target, options = {}){
         </div>
 
         <div class="sk-card sk-alarm">
-          <div class="sk-alarm-h"><span class="sk-ping"></span> Zayıf Noktalar — Görev Çağrısı</div>
+          <div class="sk-alarm-h"><span class="sk-ping"></span> Sur'daki Gedikler — Nöbet Çağrısı</div>
           ${alarms.length ? alarms.map(({l,kind}) => {
             const pending = kind === "equip" && state.pendingKeys.has(l.key);
             return `
@@ -505,11 +505,11 @@ export function mountSecurityKnight(target, options = {}){
               <div class="sk-qt"><b>${esc(l.name)} <span class="sk-qk">${pending ? "⏳ İŞLENİYOR" : ALARM[kind].tag}</span></b><small>${pending ? "Ajan düzeltmeyi uyguluyor — bitince zırh kendiliğinden kuşanır." : esc(l.note || l.desc)}</small></div>
               ${pending ? "" : `<button class="sk-btn sk-act" data-key="${l.key}" data-kind="${kind === "verify" ? "verify" : "equip"}">${ALARM[kind].btn}</button>`}
             </div>`; }).join("")
-            : `<div class="sk-quest done"><div class="sk-qi">🏆</div><div class="sk-qt"><b>Tüm zırhlar kuşanıldı ve doğrulandı!</b><small>Şövalyen tam teçhizatlı. Yalnızca izleme kaldı.</small></div></div>`}
+            : `<div class="sk-quest done"><div class="sk-qi">🏆</div><div class="sk-qt"><b>Sur sağlam — her gedik kapandı ve doğrulandı!</b><small>Nöbetin tam teçhizatlı. Geriye yalnızca nöbeti sürdürmek kaldı.</small></div></div>`}
         </div>
       </div>
 
-      <div class="sk-sect">🛡️ Kuşanılan Güçler</div>
+      <div class="sk-sect">🛡️ Kuşanılan Zırh</div>
       ${(() => {
         const groups = {};
         for (const l of state.layers){ const g = l.group || ""; (groups[g] ||= []).push(l); }
@@ -531,11 +531,14 @@ export function mountSecurityKnight(target, options = {}){
         ${Object.entries(bd).map(([l,v]) => `<div class="sk-card sk-stat sub"><div class="v">${esc(v)}</div><div class="l">↳ ${l}</div></div>`).join("")}
       </div>
 
-      <div class="sk-foot"><b>Ölçülen güç ${s}/100</b> (iddia ${claimed}). Bir zırh yalnızca gerçek, temiz bir
-        <i>yeniden tarama</i> kanıtlayınca "kuşanıldı" olur — hiçbir buton doğrudan durum yazmaz.
-        <b>Faz 2</b>'de "ajana kuyruğa al" gerçek bir ajana görev verir: düzeltmeyi <b>sıfır zararla</b> uygular
-        (ayrı dalda, testler + fingerprint delta ile doğrulanır, PR ile gelir — <i>asla</i> doğrudan main'e commit).
-        Merge sonrası yeniden tara → zırh kendiliğinden kuşanır. Panel yönetim-içidir.</div>
+      <div class="sk-oath">
+        <div class="sk-oath-h">⚔️ Warden'ın Yemini</div>
+        <ul class="sk-oath-list">
+          <li><b>Kanıtı görmeden zafer ilan etmem.</b> <span>Bir zırh yalnızca gerçek, temiz bir yeniden tarama kanıtlayınca kuşanılır — hiçbir buton "kuşanıldı" yazmaz. Ölçülen ${s}/100 (iddia ${claimed}).</span></li>
+          <li><b>Ustanın kodunu bozmadan onarırım.</b> <span>Faz 2 düzeltmesi sıfır zararla iner: ayrı dal, projenin kendi testleri, fingerprint-delta doğrulaması, PR ile — <i>asla</i> doğrudan main'e commit.</span></li>
+          <li><b>Karanlıkta değil, herkesin gözü önünde çalışırım.</b> <span>Her tarama ve istek denetim izine yazılır; aktif/DAST testleri yalnızca yetki kapısı açıkken koşar. Panel yönetim-içidir.</span></li>
+        </ul>
+      </div>
     </div>`;
 
     // Gerçekçi görsel yüklenemezse SVG şövalyeye düş.
@@ -563,7 +566,7 @@ export function mountSecurityKnight(target, options = {}){
   render();
   syncAndRender(false).then(() => {
     if (mode === "live" && loopEnabled && options.autoScan !== false && state.hasPosture === false){
-      toast("🔎 İlk tarama otomatik başladı — sistem tüm projeyi tarıyor, eksikleri çıkarıyor…");
+      toast("🔎 İlk nöbet başladı — Sur baştan aşağı taranıyor, gedikler çıkarılıyor…");
       tryLoop();
     }
   });

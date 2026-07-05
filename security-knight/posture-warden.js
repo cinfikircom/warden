@@ -27,13 +27,15 @@ const BASE_SVG = /*svg*/`
       <rect x="105" y="134" width="20" height="5" rx="2" fill="#8a6216"/></g>
   </g>`;
 
+// Rütbe merdiveni — Sur'daki Nöbet'in yükseliş yolu (destansı realm-savunma teması).
+// Zirve "Kuzey Muhafızı" (Warden of the North) → projenin adına bağlanır.
 const RANKS = [
-  { min:0,  lv:1, title:"Acemi Nöbetçi" },
-  { min:21, lv:2, title:"Çırak Muhafız" },
-  { min:41, lv:3, title:"Kalkan Eri" },
-  { min:61, lv:4, title:"Muhafız Şövalyesi" },
-  { min:81, lv:5, title:"Kale Kumandanı" },
-  { min:96, lv:6, title:"Efsane Muhafız" },
+  { min:0,  lv:1, title:"Sur'a Çağrılan" },      // çıplak acemi
+  { min:21, lv:2, title:"Yeminli Nöbetçi" },     // + deri & kalkan
+  { min:41, lv:3, title:"Kolcu" },               // + zırh gömlek
+  { min:61, lv:4, title:"Sur Şövalyesi" },       // + çelik plaka & miğfer
+  { min:81, lv:5, title:"Kale Kumandanı" },      // + tam plaka & kalkan
+  { min:96, lv:6, title:"Kuzey Muhafızı" },      // efsane — realm'in kalkanı
 ];
 
 const q = (dim) => ({

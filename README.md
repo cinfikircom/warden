@@ -1,15 +1,39 @@
+<div align="center">
+
 # ⚔️ Warden
 
-> **A defensive security platform — scan your code, then fix it, gamified.**
-> Two parts, one guardian: **Warden Scan** finds everything *missing / broken / risky* in any
-> project, and **Warden Knight** turns that real scan posture into a knight that arms up as you
-> fix real findings.
+### Defend your codebase like a realm.
 
-[![tests](https://img.shields.io/badge/tests-213%20passing-brightgreen)]()
+**Warden scans everything *missing, broken or risky* across your whole system — then arms a knight
+that only levels up when a real re-scan proves the gap is truly closed.**
+No green tick it hasn't earned. No fix that breaks your code. No move made in the dark.
+
+[![tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
+[![zero deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-8a5cf6)](CONTRIBUTING.md)
 
-🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Check catalog](docs/CHECKS.md) · ⚔️ [Warden Knight dashboard](security-knight/README.md)
+🇹🇷 [Türkçe README](docs/README.tr.md) · 📚 [Check catalog](docs/CHECKS.md) · ⚔️ [Warden Knight dashboard](security-knight/README.md) · 🛡️ [Security policy](SECURITY.md)
+
+<img src="security-knight/assets/panel-combined.png" width="820" alt="Warden Knight dashboard — the whole scan as a knight that arms up"/>
+
+</div>
+
+---
+
+## 📜 The Warden's Oath
+
+A security tool is only as good as the trust you can place in it. Warden makes **three promises —
+and enforces all three in code**, not in the README:
+
+| Vow | What it means | Enforced by |
+|---|---|---|
+| **I claim no victory I cannot prove.** | Posture is *measured*, never claimed. An armor piece turns solid **only** when a real, clean re-scan proves it — no button, endpoint or flag sets "active" directly. | content-based `fingerprint` + `computeDelta` before/after; the Knight bridge derives status from real findings only |
+| **I mend without breaking the master's work.** | Automated fixes land with **zero damage**: a separate branch, your own test suite, fingerprint-delta verification, and a PR — *never* a direct commit to `main`. | `packages/warden-skill/SKILL.md` remediation procedure (git worktree isolation, delta gate, PR gate) |
+| **I work in the open, never in the dark.** | Passive/read-only by default; every command and request is logged; active/DAST tests run **only** behind an explicit authorization gate. | `warden.authz.yml` gate · `warden-report/warden-run.log` audit trail · secret masking at the source |
+
+> These aren't slogans — they're the invariants the test suite guards. Break one and CI goes red.
 
 ---
 
@@ -205,8 +229,11 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 204 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+Actively developed. 214 tests passing; 12 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
 See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
+
+Ideas, checks for new stacks, and bug reports are all welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Found a vulnerability *in Warden itself*? Please follow [`SECURITY.md`](SECURITY.md) (private disclosure).
 
 ## License
 

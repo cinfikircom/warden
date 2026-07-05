@@ -1,9 +1,33 @@
-# Warden
+<div align="center">
 
-> Taşınabilir, **savunma amaçlı** production-readiness & güvenlik denetim aracı.
-> Bir projeyi (kod + config + bağımlılık + IaC + — yetki verilirse — çalışan ortam)
-> analiz eder; **eksik/hatalı/riskli** her şeyi şiddet sırasına göre, **kanıtlı** listeler;
-> her P0/P1 için kopyala-yapıştır **Claude Code remediation prompt'u** üretir.
+# ⚔️ Warden
+
+### Kodunu bir realm gibi savun.
+
+**Warden tüm sistemindeki *eksik, bozuk veya riskli* her şeyi tarar — sonra yalnızca gerçek bir
+yeniden tarama gediğin kapandığını kanıtlayınca zırhlanan bir şövalyeyi kuşandırır.**
+Hak etmediği hiçbir yeşil tik yok. Kodunu bozan hiçbir düzeltme yok. Karanlıkta atılan hiçbir adım yok.
+
+🇬🇧 [English README](../README.md) · 📚 [Check kataloğu](CHECKS.md) · ⚔️ [Warden Knight paneli](../security-knight/README.md)
+
+<img src="../security-knight/assets/panel-combined.png" width="820" alt="Warden Knight paneli"/>
+
+</div>
+
+---
+
+## 📜 Warden'ın Yemini
+
+Bir güvenlik aracı, ona duyabildiğin güven kadar değerlidir. Warden **üç söz verir — ve üçünü de
+README'de değil, kodda uygular:**
+
+| Yemin | Anlamı | Nasıl uygulanır |
+|---|---|---|
+| **Kanıtı görmeden zafer ilan etmem.** | Duruş *ölçülür*, iddia edilmez. Bir zırh yalnızca gerçek, temiz bir yeniden tarama kanıtlayınca katılaşır — hiçbir buton/uç/bayrak "active" yazmaz. | içerik-tabanlı `fingerprint` + `computeDelta` öncesi/sonrası; Knight köprüsü durumu yalnızca gerçek bulgulardan türetir |
+| **Ustanın kodunu bozmadan onarırım.** | Otomatik düzeltmeler **sıfır zararla** iner: ayrı dal, projenin kendi testleri, fingerprint-delta doğrulaması ve PR — *asla* doğrudan `main`'e commit. | `packages/warden-skill/SKILL.md` düzeltme prosedürü (git worktree izolasyonu, delta kapısı, PR kapısı) |
+| **Karanlıkta değil, herkesin gözü önünde çalışırım.** | Varsayılan pasif/read-only; her komut ve istek loglanır; aktif/DAST testleri **yalnızca** yetki kapısı açıkken koşar. | `warden.authz.yml` kapısı · `warden-report/warden-run.log` denetim izi · kaynakta secret maskeleme |
+
+> Bunlar slogan değil — test paketinin koruduğu değişmezlerdir. Birini bozarsan CI kırmızıya döner.
 
 ---
 

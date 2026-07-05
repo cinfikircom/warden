@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🛡️ Report a security vulnerability in Warden itself
+    url: https://github.com/cinfikircom/warden/security/advisories/new
+    about: Please disclose privately — do not open a public issue. See SECURITY.md.
+  - name: 💬 Questions & ideas
+    url: https://github.com/cinfikircom/warden/discussions
+    about: For open-ended questions, ideas, and show-and-tell.
