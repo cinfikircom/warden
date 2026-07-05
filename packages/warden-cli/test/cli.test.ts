@@ -55,14 +55,30 @@ describe("Warden CLI smoke", () => {
     expect(stderr).toContain("Bilinmeyen komut: frobnicate");
   });
 
-  it("init hedef projeye skill iskeletini yazar, exit 0", async () => {
+  it("init hedef projeye skill iskeletini + paneli yazar (--no-launch, sunucu başlatmaz), exit 0", async () => {
     const dir = mkdtempSync(join(tmpdir(), "warden-cli-test-"));
     try {
-      const { code, stdout } = await runCli(["init", "--target", dir], dir);
+      const { code, stdout } = await runCli(["init", "--target", dir, "--no-launch"], dir);
       expect(code).toBe(0);
       expect(stdout).toContain("Warden kuruldu");
       expect(existsSync(join(dir, ".claude", "skills", "warden", "README.md"))).toBe(true);
       expect(existsSync(join(dir, "warden.authz.example.yml"))).toBe(true);
+      expect(existsSync(join(dir, "security-knight", "server.mjs"))).toBe(true);
+      expect(existsSync(join(dir, "security-knight", "knight.js"))).toBe(true);
+      // kaynak reponun kendi çalışma-zamanı durumu (jobs/gaps/vb.) asla taşınmaz — hedef temiz başlar.
+      expect(existsSync(join(dir, "security-knight", "state", "jobs.jsonl"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("init --no-panel paneli hiç kopyalamaz", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "warden-cli-test-"));
+    try {
+      const { code } = await runCli(["init", "--target", dir, "--no-panel"], dir);
+      expect(code).toBe(0);
+      expect(existsSync(join(dir, ".claude", "skills", "warden", "SKILL.md"))).toBe(true);
+      expect(existsSync(join(dir, "security-knight"))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -100,7 +100,8 @@ pnpm install
 # Passive audit (default; never sends an active request)
 pnpm warden scan --target <path-to-project>
 
-# Install Warden into a project as a Claude Code skill
+# Install Warden into a project as a Claude Code skill — also copies the Warden Knight
+# dashboard into that project and opens it in your browser (pass --no-launch to skip that)
 pnpm warden init --target <path-to-project>
 
 # Continuous monitoring (periodic re-scan + before/after delta)
@@ -135,7 +136,20 @@ pnpm knight   # → opens the Warden Knight panel in your browser automatically
 Run a scan (`pnpm warden scan`) first so there's something to arm up. From then on, everything —
 re-scanning, equipping an armor piece (which triggers a real scan and shows real findings), queuing
 a fix for an agent, watching the knight level up — happens from the panel itself; no need to come
-back to the terminal. See [`security-knight/README.md`](security-knight/README.md) for the full picture.
+back to the terminal.
+
+That runs the dashboard against **this repo**. To point this same running panel at a *different*
+project without installing anything into it, set `WARDEN_TARGET`:
+
+```bash
+WARDEN_TARGET=/abs/path/to/other-project pnpm knight
+```
+
+To install a dedicated, self-contained copy of the panel *inside* a project you actively harden
+(so its own `pnpm warden scan --target .` needs no env var, and its own Claude Code session can run
+the parallel-agent remediation procedure), use `warden init` instead — see above.
+
+See [`security-knight/README.md`](security-knight/README.md) for the full picture.
 
 ## The value loop
 

@@ -31,6 +31,10 @@ interface Parsed {
   severity: readonly Severity[] | null;
   /** `prompts` komutu: --fingerprint <fp1,fp2> — verilirse yalnızca bu fingerprint'ler. */
   fingerprint: readonly string[] | null;
+  /** `init` komutu: security-knight panelini hiç kopyalama. */
+  noPanel: boolean;
+  /** `init` komutu: paneli kopyala ama başlatma/tarayıcıyı açma. */
+  noLaunch: boolean;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -49,6 +53,8 @@ function parseArgs(argv: readonly string[]): Parsed {
   let modules: readonly ModuleId[] | null = null;
   let severity: readonly Severity[] | null = null;
   let fingerprint: readonly string[] | null = null;
+  let noPanel = false;
+  let noLaunch = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--target" || a === "-t") {
@@ -69,10 +75,12 @@ function parseArgs(argv: readonly string[]): Parsed {
       severity = vs.filter((v): v is Severity => (SEVERITIES as readonly string[]).includes(v));
     } else if (a === "--fingerprint") {
       fingerprint = (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-    } else if (a === "--help" || a === "-h") help = true;
+    } else if (a === "--no-panel") noPanel = true;
+    else if (a === "--no-launch") noLaunch = true;
+    else if (a === "--help" || a === "-h") help = true;
     else if (a === "--version" || a === "-v") version = true;
   }
-  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint };
+  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint, noPanel, noLaunch };
 }
 
 /** CI gate: eşik şiddetinde/üstünde bulgu varsa true (çıkış kodu 1). */
@@ -105,7 +113,9 @@ function scanOptionsFor(target: string, intent: "scan" | "pentest", moduleIds: r
 const HELP = `Warden ${WARDEN_VERSION} — production-readiness & güvenlik denetimi (savunma amaçlı)
 
 Kullanım:
-  warden init    [--target <yol>]   Warden'i projeye Claude Code skill'i olarak kurar.
+  warden init    [--target <yol>]   Warden'i projeye Claude Code skill'i olarak kurar; Warden Knight
+                                    panelini kopyalar ve (--no-launch verilmedikçe) hemen başlatıp
+                                    tarayıcıda açar.
   warden scan    [--target <yol>]   Pasif (read-only) denetim. Hiç aktif istek atmaz. [varsayılan]
   warden pentest [--target <yol>]   Aktif/DAST denetim. YALNIZCA warden.authz.yml açıkken çalışır.
   warden report  [--target <yol>]   Son warden-report/ özetini yazdırır.
@@ -123,6 +133,8 @@ Seçenekler:
   --module <liste>     scan/pentest/report/monitor: yalnızca verilen modül(ler) (virgülle, ör. B,CLOUD).
                         ⚠ Diğer tüm modüllerin skorunu "n/d" yapar — tek-boyut CI kapısı içindir,
                         tam postür/delta için --module KULLANMA.
+  --no-panel           init: security-knight panelini hiç kopyalama (yalnızca skill kurulur).
+  --no-launch          init: paneli kopyala ama başlatma/tarayıcıyı açma (ör. CI/otomasyon).
 
 ⛔ Güvenlik: Varsayılan read-only. Aktif testler yetki kapısına (warden.authz.yml) bağlıdır;
    yalnızca allow-list host'lara, rate-limited, non-destructive. DoS/brute-force/exploit YOK.`;
@@ -210,7 +222,7 @@ async function main(): Promise<number> {
 
   switch (p.command) {
     case "init": {
-      runInit(p.target);
+      await runInit(p.target, { noPanel: p.noPanel, noLaunch: p.noLaunch });
       return 0;
     }
     case "scan": {

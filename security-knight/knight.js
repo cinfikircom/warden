@@ -463,9 +463,9 @@ export function mountSecurityKnight(target, options = {}){
     <div class="sk">
       <div class="sk-top">
         <div><div class="sk-title">⚔️ Güvenlik Şövalyesi</div>
-          <div class="sk-sub">Bot &amp; kötüye kullanım savunmanın canlı karakteri — güç kazandıkça yükselir.</div></div>
+          <div class="sk-sub"><b>Faz 1:</b> tüm sistemini tara, gerçek açıkları gör · <b>Faz 2:</b> ajan sıfır zararla kapatsın — her düzeltme bir zırhı kuşandırır.</div></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          ${loopEnabled ? `<button class="sk-btn sk-rescan">🔄 Yeniden tara & doğrula</button>` : ""}
+          ${loopEnabled ? `<button class="sk-btn sk-rescan">🔎 Tüm sistemi tara & raporla</button>` : ""}
           <button class="sk-btn ghost sk-reset" style="display:${state.original ? "" : "none"}">↺ Gerçek duruma dön</button>
         </div>
       </div>
@@ -520,20 +520,19 @@ export function mountSecurityKnight(target, options = {}){
         ).join("") + relicsHtml;
       })()}
 
-      <div class="sk-sect">📜 Savaş Günlüğü <span class="sk-muted">— son 24 saat</span></div>
+      <div class="sk-sect">📊 Tarama Raporu <span class="sk-muted">— Faz 1, son Warden taramasından</span></div>
       <div class="sk-stats">
-        ${[["Püskürtülen saldırı", m["Püskürtülen saldırı"]], ["Korunan istek", m["Korunan istek"]],
-           ["Ulaşan elçi", m["Ulaşan elçi (e-posta)"]], ["Aktif tehdit", m["Aktif tehdit"]]]
+        ${[["Toplam bulgu", m["Findings"]], ["🔴 P0 (acil)", m["P0"]],
+           ["🟠 P1", m["P1"]], ["En yüksek CVSS", m["Max CVSS"]]]
           .map(([l,v]) => `<div class="sk-card sk-stat"><div class="v">${esc(v ?? "–")}</div><div class="l">${l}</div></div>`).join("")}
-        ${(() => { const ff = m["Dostu vurma"]; if (ff === undefined) return "";
-          const bad = Number(ff) > 0;
-          return `<div class="sk-card sk-stat ff ${bad ? "bad" : "good"}"><div class="v">${esc(ff)}</div><div class="l">🎯 Dostu vurma${bad ? " ⚠" : " ✓"}</div></div>`; })()}
         ${Object.entries(bd).map(([l,v]) => `<div class="sk-card sk-stat sub"><div class="v">${esc(v)}</div><div class="l">↳ ${l}</div></div>`).join("")}
       </div>
 
-      <div class="sk-foot"><b>Ölçülen güç ${s}/100</b> (iddia ${claimed}). Aktif+doğrulanmış zırh tam,
-        aktif ama <b>kanıtsız (hayalet)</b> zırh yalnızca 0,6 sayar — panel <i>iddia edileni değil ölçüleni</i> gösterir.
-        Doğrulama backend self-check + saldırı-testinden gelir; bir savunma bozulursa zırh düşer ve alarm çalar. Panel yönetim-içidir.</div>
+      <div class="sk-foot"><b>Ölçülen güç ${s}/100</b> (iddia ${claimed}). Bir zırh yalnızca gerçek, temiz bir
+        <i>yeniden tarama</i> kanıtlayınca "kuşanıldı" olur — hiçbir buton doğrudan durum yazmaz.
+        <b>Faz 2</b>'de "ajana kuyruğa al" gerçek bir ajana görev verir: düzeltmeyi <b>sıfır zararla</b> uygular
+        (ayrı dalda, testler + fingerprint delta ile doğrulanır, PR ile gelir — <i>asla</i> doğrudan main'e commit).
+        Merge sonrası yeniden tara → zırh kendiliğinden kuşanır. Panel yönetim-içidir.</div>
     </div>`;
 
     // Gerçekçi görsel yüklenemezse SVG şövalyeye düş.

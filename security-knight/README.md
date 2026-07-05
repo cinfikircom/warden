@@ -100,6 +100,21 @@ pnpm warden scan --target <project>                            # → warden-repo
 node warden-bridge.mjs --file ../warden-report/findings.json    # → state/warden-posture.json
 ```
 
+## Two ways to install
+
+- **Per-project (recommended for the full loop):** `pnpm warden init --target <project>` — copies
+  this panel into `<project>/security-knight/` (and the Claude Code skill into
+  `<project>/.claude/skills/warden/`), then immediately starts the panel and opens it in your
+  browser. The copied panel's own `pnpm warden scan --target .` always targets that project — no
+  env var needed, since it's now physically inside it. Pass `--no-launch` to copy without starting
+  it (e.g. in CI), or `--no-panel` to install only the skill (old behavior).
+- **Central, pointed at another project:** keep this repo as-is and set `WARDEN_TARGET=/abs/path/to/project`
+  (in `.env`, or inline: `WARDEN_TARGET=/path/to/project node server.mjs`) — every scan/gaps/fix-queue
+  request targets that path instead of this repo's own parent directory. Useful for a single
+  "fleet dashboard" you point at whichever project you're currently hardening, without installing
+  anything into it. `state/warden-gaps/` and `warden-report/` still land wherever the scan ran
+  (the target project's own tree for the scan output; this panel's own `state/` for the gaps cache).
+
 ## How it works
 
 ```

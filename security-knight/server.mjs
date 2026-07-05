@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 import { readFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, normalize, extname } from "node:path";
+import { dirname, join, normalize, extname, resolve } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const STATE = join(ROOT, "state");
@@ -33,6 +33,10 @@ const GAPS_DIR = join(STATE, "warden-gaps"); // warden-equip.mjs'in yazdığı g
 const PORT = Number(process.env.PORT || 8137);
 const ADMIN_TOKEN = process.env.SK_ADMIN_TOKEN || "";
 const ALLOWED_ORIGIN = process.env.SK_ALLOWED_ORIGIN || `http://127.0.0.1:${PORT}`;
+// Merkezi bir panelin kendi ebeveyn dizini yerine BAŞKA bir projeyi hedeflemesi için (mutlak yol).
+// Boşsa warden-equip.mjs/loop.mjs kendi varsayılanını (ROOT'un ebeveyni) kullanır.
+const TARGET = process.env.WARDEN_TARGET ? resolve(process.env.WARDEN_TARGET) : null;
+const targetArgs = TARGET ? ["--target", TARGET] : [];
 
 const MIME = { ".html":"text/html", ".css":"text/css", ".js":"text/javascript",
   ".mjs":"text/javascript", ".json":"application/json", ".svg":"image/svg+xml",
@@ -102,7 +106,7 @@ const server = createServer(async (req, res) => {
     // Tam döngü (Warden taraması → köprü). Detached; panel posture'ı yoklar.
     if (path === "/api/loop/run" && req.method === "POST"){
       try {
-        const child = spawn("node", ["loop.mjs"], { cwd: ROOT, detached: true, stdio: "ignore" });
+        const child = spawn("node", ["loop.mjs", ...targetArgs], { cwd: ROOT, detached: true, stdio: "ignore" });
         child.unref();
         await audit(req, "loop_started");
         return json(res, 202, { started: true, note: "Warden taraması → köprü çalışıyor." });
@@ -114,7 +118,7 @@ const server = createServer(async (req, res) => {
       const { module } = await body(req);
       if (!module) return json(res, 400, { error:"module gerekli" });
       try {
-        const child = spawn("node", ["warden-equip.mjs", "--module", module], { cwd: ROOT, detached: true, stdio: "ignore" });
+        const child = spawn("node", ["warden-equip.mjs", "--module", module, ...targetArgs], { cwd: ROOT, detached: true, stdio: "ignore" });
         child.unref();
         await audit(req, "warden_scan_started", { module });
         return json(res, 202, { started:true, note:`${module} için gerçek tarama başladı.` });
@@ -132,7 +136,7 @@ const server = createServer(async (req, res) => {
       const { module } = await body(req);
       if (!module) return json(res, 400, { error:"module gerekli" });
       try {
-        const child = spawn("node", ["warden-equip.mjs", "--module", module, "--queue"], { cwd: ROOT, detached: true, stdio: "ignore" });
+        const child = spawn("node", ["warden-equip.mjs", "--module", module, "--queue", ...targetArgs], { cwd: ROOT, detached: true, stdio: "ignore" });
         child.unref();
         await audit(req, "warden_fix_queued", { module });
         return json(res, 202, { queued:true, note:`${module} için düzeltme kuyruğa alınıyor (taze tarama + prompt).` });
@@ -169,6 +173,7 @@ function openBrowser(url){
 server.listen(PORT, "127.0.0.1", () => {
   const url = `http://127.0.0.1:${PORT}/`;
   console.log(`Güvenlik Şövalyesi (DEV) → ${url}`);
+  console.log(`Hedef proje: ${TARGET || join(ROOT, "..") + " (bu panelin bulunduğu repo)"}`);
   if (!ADMIN_TOKEN) console.warn("⚠  SK_ADMIN_TOKEN yok → DEV-OPEN mod (yalnız 127.0.0.1). Üretimde Next.js route'larını + admin auth kullan.");
   openBrowser(url);
 });
