@@ -8,7 +8,7 @@
 that only levels up when a real re-scan proves the gap is truly closed.**
 No green tick it hasn't earned. No fix that breaks your code. No move made in the dark.
 
-[![tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-235%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![zero deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
@@ -98,6 +98,7 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 - **Module CLOUD** (passive, Terraform): public S3/GCS, IAM wildcards, open security groups/firewalls, public RDS/Cloud SQL, Azure public storage, Cloudflare SSL mode.
 - **Module K8S** (passive): privileged/root containers, `:latest` images, plaintext secret env, ingress without TLS.
 - **Module AI** (passive): embedded LLM API keys, prompt‑injection surface, system‑prompt leakage.
+- **Module ACCESS — Access control & tenant isolation** (passive): the OWASP #1 gap that breaks SaaS/CRM/ERP — **multi‑tenant isolation** (object fetched by client id with no `tenant_id`/`org_id` scope → cross‑tenant leak), **missing endpoint authorization** (state‑changing route with no auth middleware while the rest of the app authenticates), **mass assignment / over‑posting** (`req.body` written straight to a model → `is_admin` escalation), and **privileged/admin actions without a role check**. Multi‑stack (Express/Nest, Django, Rails, Laravel; Prisma/Sequelize/TypeORM/Mongoose). Only runs when a web/API + ORM surface is detected.
 - **Module PAY — Payment security & reliability** (passive): recognizes a payment integration (Stripe, PayPal, Braintree, Adyen, Razorpay, Mollie, iyzico, craftgate, PayU…) and audits the money path — **webhook signature verification** (forged “payment succeeded”), **client‑set amount** (price tampering), **idempotency** (double charge on retry), **card data (PAN/CVV) in logs/server**, **reconciliation (mutabakat) cron** presence, **orphan/interrupted payment** handling (charged‑but‑not‑fulfilled, uncaptured auths), **failed/async event** handling, **subscription dunning** (failed‑renewal recovery), **3DS/SCA** enforcement (legacy Charges API can’t do SCA), and **refund accounting** (client‑set refund amount → over‑refund). Only runs when a payment integration is detected.
 - **Module C — DAST** (active, **authorization‑gated**): exposed files (`/.env`, `/.git`, swagger), security headers + TLS, open admin panels, rate‑limit probing, cookie flags, sensitive port inventory.
 
@@ -230,7 +231,7 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 228 tests passing; 13 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+Actively developed. 235 tests passing; 14 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
 See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 Ideas, checks for new stacks, and bug reports are all welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).

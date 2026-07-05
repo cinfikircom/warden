@@ -1,0 +1,13 @@
+// Multi-tenant schema — every row belongs to a tenant.
+model Invoice {
+  id       String @id @default(cuid())
+  tenantId String
+  amount   Int
+}
+
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+  email    String
+  role     String @default("member")
+}

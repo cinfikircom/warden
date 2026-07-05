@@ -8,6 +8,7 @@ import { k8sModule } from "./modules/k8s/index.ts";
 import { cloudModule } from "./modules/cloud/index.ts";
 import { aiModule } from "./modules/ai/index.ts";
 import { payModule } from "./modules/pay/index.ts";
+import { accessModule } from "./modules/access/index.ts";
 
 /**
  * Yerleşik denetim modülleri.
@@ -17,5 +18,5 @@ import { payModule } from "./modules/pay/index.ts";
  * C active:true → yalnızca yetki kapısı açıkken.
  */
 export function defaultModules(): WardenModule[] {
-  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, payModule, dastModule];
+  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, payModule, accessModule, dastModule];
 }

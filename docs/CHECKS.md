@@ -154,6 +154,21 @@ bastırılabilir.
 
 > Ödeme entegrasyonu yoksa PAY hiç bulgu üretmez ve boyut "n/d" kalır.
 
+## Modül ACCESS — Erişim Kontrolü & Kiracı İzolasyonu (pasif) · Faz 6+
+
+OWASP #1 (Broken Access Control) — SaaS/CRM/ERP'nin en pahalı ihlal noktası. Yalnızca bir web/API +
+ORM yüzeyi tespit edilirse koşar. İş-mantığı yetkilendirmesi statik olarak zor olduğu için
+heuristik → düşük/orta güvenle işaretlenir, `.warden-ignore.yml` ile bastırılabilir.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| ACC-1 | Kiracı izolasyonu: nesne istemci id'siyle çekiliyor, tenant/org filtresi yok (cross-tenant sızıntı) | + | ✅ | OWASP A01 · API1 BOLA · CWE-639 |
+| ACC-2 | State-değiştiren endpoint auth middleware'i olmadan (proje geneli auth kullanıyorken) | + | ✅ | OWASP A01 · API5 |
+| ACC-3 | Mass assignment / over-posting (req.body → model; is_admin escalation) | + | ✅ | OWASP A04 · API6 · CWE-915 |
+| ACC-4 | Ayrıcalıklı/admin aksiyonu rol/izin kontrolü olmadan (yetki yükseltme) | + | ✅ | OWASP A01 · CWE-269 |
+
+> Web/API yüzeyi yoksa ACCESS hiç bulgu üretmez. Multi-stack: Express/Fastify/Nest · Django · Rails · Laravel · Prisma/Sequelize/TypeORM/Mongoose.
+
 ---
 
 ## Çapraz Kesen Yetenekler (roadmap)

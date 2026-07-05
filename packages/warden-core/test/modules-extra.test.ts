@@ -5,6 +5,7 @@ import { collectK8sDocs, analyzeK8s } from "../src/modules/k8s/index.ts";
 import { collectIacFiles, analyzeCloud } from "../src/modules/cloud/index.ts";
 import { collectAiData, analyzeAi } from "../src/modules/ai/index.ts";
 import { collectPayData, analyzePay } from "../src/modules/pay/index.ts";
+import { collectAccessData, analyzeAccess } from "../src/modules/access/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -85,5 +86,30 @@ describe("Modül PAY (ödeme güvenliği & güvenilirliği)", () => {
       usesPayments: false, providers: [], files: [], hasReconciliation: false, hasSweep: false,
       hasPendingState: false, usesSubscriptions: false, hasDunning: false,
     })).toHaveLength(0);
+  });
+});
+
+describe("Modül ACCESS (erişim kontrolü & kiracı izolasyonu)", () => {
+  const data = collectAccessData(createFsContext(fix("vuln-access")));
+  const findings = analyzeAccess(data);
+  const got = ids(findings);
+
+  it("web/API + kiracı + auth yüzeyi tespit edilir", () => {
+    expect(data.usesWeb).toBe(true);
+    expect(data.usesTenancy).toBe(true);
+    expect(data.usesAuth).toBe(true);
+  });
+  it("kiracı filtresi olmadan id sorgusu → ACC-1 P0", () => {
+    expect(findings.find((f) => f.id.startsWith("ACC-1"))?.severity).toBe("P0");
+  });
+  it("auth'suz state-değiştiren endpoint → ACC-2", () => { expect(got).toContain("ACC-2-route-no-auth"); });
+  it("mass assignment (req.body → model) → ACC-3", () => { expect(got).toContain("ACC-3-mass-assignment"); });
+  it("tek-alan erişimi (req.body.text) ACC-3 tetiklemez (false-positive guard)", () => {
+    const comments = findings.filter((f) => f.id.startsWith("ACC-3") && f.evidence[0]?.source.includes("public-routes"));
+    expect(comments).toHaveLength(0);
+  });
+  it("rol kontrolsüz admin aksiyonu → ACC-4", () => { expect(got).toContain("ACC-4-privileged-no-role"); });
+  it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeAccess({ usesWeb: false, usesTenancy: false, usesAuth: false, files: [] })).toHaveLength(0);
   });
 });

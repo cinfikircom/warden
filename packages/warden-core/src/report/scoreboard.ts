@@ -28,6 +28,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   FE: "Frontend Security",
   AI: "AI / LLM Security",
   PAY: "Payment Security & Reliability",
+  ACCESS: "Access Control & Tenant Isolation",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */

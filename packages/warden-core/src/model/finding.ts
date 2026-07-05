@@ -16,6 +16,7 @@ export const MODULES = [
   "FE", // Frontend Security
   "AI", // AI / LLM Security
   "PAY", // Ödeme Güvenliği & Güvenilirliği (webhook/tutar/mutabakat/orphan ödeme)
+  "ACCESS", // Erişim Kontrolü & Kiracı İzolasyonu (OWASP #1: multi-tenant/authz/mass-assignment)
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];
