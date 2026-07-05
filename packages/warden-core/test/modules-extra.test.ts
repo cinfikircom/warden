@@ -11,6 +11,7 @@ import { collectApiData, analyzeApi } from "../src/modules/api/index.ts";
 import { collectPrivData, analyzePriv } from "../src/modules/priv/index.ts";
 import { collectWebData, analyzeWeb } from "../src/modules/web/index.ts";
 import { collectFlowData, analyzeFlow } from "../src/modules/flow/index.ts";
+import { collectEmailData, analyzeEmail } from "../src/modules/email/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -213,5 +214,21 @@ describe("Modül FLOW (iş-akışı & veri bütünlüğü)", () => {
   it("idempotent olmayan kritik oluşturma → FLOW-3", () => { expect(got).toContain("FLOW-3-no-idempotency"); });
   it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeFlow({ usesWeb: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül EMAIL (e-posta güvenliği)", () => {
+  const data = collectEmailData(createFsContext(fix("vuln-email")));
+  const findings = analyzeEmail(data);
+  const got = ids(findings);
+
+  it("e-posta gönderim yüzeyi (nodemailer) tespit edilir", () => {
+    expect(data.usesMail).toBe(true);
+  });
+  it("header injection (from/replyTo + kullanıcı girdisi) → EMAIL-1", () => { expect(got).toContain("EMAIL-1-header-injection"); });
+  it("HTML gövdeye kaçışsız girdi → EMAIL-2", () => { expect(got).toContain("EMAIL-2-html-injection"); });
+  it("TLS'siz SMTP → EMAIL-3", () => { expect(got).toContain("EMAIL-3-smtp-no-tls"); });
+  it("mailer yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeEmail({ usesMail: false, files: [] })).toHaveLength(0);
   });
 });

@@ -162,6 +162,21 @@ CRM/ERP güvenilirliği: para/stok/durum tutan iş akışlarında sessiz veri bo
 > Web yüzeyi yoksa FLOW hiç bulgu üretmez. Bulgular düşük güven (heuristik) — bilinçli tekil yazma
 > ya da kuyruğa dayalı akışlarda `.warden-ignore.yml` ile bastırılabilir.
 
+## Modül EMAIL — E-posta Güvenliği (pasif) · Faz 6+
+
+E-posta güvenliğinin **kod-seviyesinde statik saptanabilen** dilimi. Yalnızca bir mailer/SMTP
+yüzeyi (nodemailer, SendGrid, SES, Mailgun, Postmark, Resend, smtplib, PHPMailer…) varsa koşar.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| EMAIL-1 | E-posta header injection (kullanıcı girdisi from/replyTo/sender/cc/bcc/headers'a) | + | ✅ | CWE-93 · CWE-159 · OWASP A03 |
+| EMAIL-2 | HTML e-posta gövdesine kaçışsız kullanıcı girdisi (içerik enjeksiyonu / phishing) | + | ✅ | CWE-79 · CWE-80 · OWASP A03 |
+| EMAIL-3 | TLS'siz / doğrulamasız SMTP taşıması (secure:false / port 25 / ignoreTLS / rejectUnauthorized:false) | + | ✅ | CWE-319 · OWASP A02 |
+
+> **SPF/DKIM/DMARC** kaynak koddan görülemez — canlı domain karşısında DNS sorgusuyla doğrulanır;
+> bu, Modül C/DAST'ın (yetki kapılı, canlı hedef) yeridir, statik analizin değil.
+> Mailer yoksa EMAIL hiç bulgu üretmez.
+
 ---
 
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2

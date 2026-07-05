@@ -8,7 +8,7 @@
 that only levels up when a real re-scan proves the gap is truly closed.**
 No green tick it hasn't earned. No fix that breaks your code. No move made in the dark.
 
-[![tests](https://img.shields.io/badge/tests-267%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-272%20passing-brightgreen)]()
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)]()
 [![zero deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
@@ -102,6 +102,7 @@ Warden has dual‑use capabilities (active/DAST tests). These rules are enforced
 - **Module AUTH — Identity & session hardening** (passive): account-takeover surface — **MFA/2FA absence**, **predictable password-reset tokens** (`Math.random`/`Date.now`), **insecure session cookies** (missing `httpOnly`/`secure`/`sameSite`), **JWT without expiry**, **login brute-force protection** (rate-limit/lockout), and **weak password policy** (hashing but no strength/pwned check). Absence checks scan comment-stripped code. Only runs when an auth surface is detected.
 - **Module API — API security (OWASP API Top 10)** (passive): the API-specific gaps beyond ACCESS/injection — **excessive data exposure** (`SELECT *` / returning every column), **no rate limiting**, **unbounded queries** (`findMany`/`findAll` with no pagination → whole table), **verbose errors** (stack traces leaked to the client), and **GraphQL depth/complexity limits**. Only runs when an HTTP/API surface is detected.
 - **Module PRIV — Data privacy & audit trail** (passive): the compliance layer for CRM/ERP holding personal data (KVKK/GDPR) — **PII in logs** (email/phone/national‑id/IBAN), **PII in URLs/query strings**, **high‑sensitive fields without at‑rest encryption**, **no erasure / right‑to‑be‑forgotten** mechanism, and **no audit trail** of who accessed/changed sensitive records. Only runs when PII fields are detected.
+- **Module EMAIL — Email security** (passive): the statically‑detectable slice of email security — **email header injection** (user input into `from`/`replyTo`/`headers` → CRLF, hidden Bcc exfiltration, sender spoofing), **unescaped user input in HTML email bodies** (phishing / content injection), and **SMTP without TLS** (`secure:false`, port 25, `ignoreTLS`, `rejectUnauthorized:false` → credentials & content in the clear). Only runs when a mailer/SMTP surface is detected. *(SPF/DKIM/DMARC are DNS‑level records verified against a live domain — that belongs to the DAST layer, not static analysis.)*
 - **Module FLOW — Workflow & data integrity** (passive): the reliability layer for CRM/ERP that touches money, stock or state — a generalization of PAY‑9 beyond payments. Flags **multi‑step DB writes without a transaction** (crash mid‑way → account debited but not credited, order created but stock not decremented), **non‑atomic read‑modify‑write** on counters/balances/stock (concurrent requests → lost update, oversell), and **non‑idempotent creation** of orders/transfers/reservations (double‑click / retry → duplicate records). Handler bodies are brace‑matched and evaluated per handler. Only runs when a web surface is detected.
 - **Module WEB — CSRF, clickjacking & security headers** (passive): the static complement to Module B (CORS/XSS/CSP) and DAST (live headers) — notably **CSRF, which no other module covers**. Flags **missing CSRF protection** on cookie‑session state‑changing routes, **absent security headers** (helmet/X‑Frame‑Options/HSTS/CSP → clickjacking, SSL‑strip, MIME‑sniffing), and **reflected CORS origin with credentials** (`origin: req.origin` → any site gets authenticated access). Only runs when a web surface is detected.
 - **Module PAY — Payment security & reliability** (passive): recognizes a payment integration (Stripe, PayPal, Braintree, Adyen, Razorpay, Mollie, iyzico, craftgate, PayU…) and audits the money path — **webhook signature verification** (forged “payment succeeded”), **client‑set amount** (price tampering), **idempotency** (double charge on retry), **card data (PAN/CVV) in logs/server**, **reconciliation (mutabakat) cron** presence, **orphan/interrupted payment** handling (charged‑but‑not‑fulfilled, uncaptured auths), **failed/async event** handling, **subscription dunning** (failed‑renewal recovery), **3DS/SCA** enforcement (legacy Charges API can’t do SCA), and **refund accounting** (client‑set refund amount → over‑refund). Only runs when a payment integration is detected.
@@ -236,7 +237,7 @@ Adding a stack = one `StackDetector` + optional schema analyzer + declarative SA
 
 ## Status
 
-Actively developed. 267 tests passing; 17 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
+Actively developed. 272 tests passing; 18 vulnerable‑by‑design fixtures + a safe‑by‑design fixture (false‑positive guard).
 See [`docs/CHECKS.md`](docs/CHECKS.md) for the full, per‑check status catalog.
 
 Ideas, checks for new stacks, and bug reports are all welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).

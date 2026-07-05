@@ -33,6 +33,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   PRIV: "Data Privacy & Audit Trail",
   WEB: "CSRF, Clickjacking & Security Headers",
   FLOW: "Workflow & Data Integrity",
+  EMAIL: "Email Security",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */

@@ -21,6 +21,7 @@ export const MODULES = [
   "PRIV", // Veri Gizliliği & Denetim İzi (PII log/URL, at-rest şifreleme, KVKK/GDPR erasure, audit trail)
   "WEB", // CSRF, Clickjacking & Güvenlik Başlıkları (pasif: csrf yok / helmet yok / yansıtılan CORS+credentials)
   "FLOW", // İş-Akışı & Veri Bütünlüğü (transaction'sız çok-adımlı yazma / atomik olmayan sayaç / idempotent olmayan oluşturma)
+  "EMAIL", // E-posta Güvenliği (header injection / HTML gövdeye kaçışsız girdi / TLS'siz SMTP) — SPF/DKIM/DMARC DAST/DNS'te
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];

@@ -14,6 +14,7 @@ import { apiModule } from "./modules/api/index.ts";
 import { privModule } from "./modules/priv/index.ts";
 import { webModule } from "./modules/web/index.ts";
 import { flowModule } from "./modules/flow/index.ts";
+import { emailModule } from "./modules/email/index.ts";
 
 /**
  * Yerleşik denetim modülleri.
@@ -23,5 +24,5 @@ import { flowModule } from "./modules/flow/index.ts";
  * C active:true → yalnızca yetki kapısı açıkken.
  */
 export function defaultModules(): WardenModule[] {
-  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, payModule, accessModule, authModule, apiModule, privModule, webModule, flowModule, dastModule];
+  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, payModule, accessModule, authModule, apiModule, privModule, webModule, flowModule, emailModule, dastModule];
 }
