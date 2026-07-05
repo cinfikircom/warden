@@ -130,6 +130,27 @@ OWASP açıklarını **açık isimle** bulur ve ASVS kontrollerine eşler. Rapor
 
 > CLOUD/K8S/AI modülleri yalnızca ilgili dosyalar (IaC `.tf` · k8s manifest · AI SDK) bulununca koşar (gürültü önleme).
 
+## Modül PAY — Ödeme Güvenliği & Güvenilirliği (pasif) · Faz 6+
+
+Yalnızca bir ödeme entegrasyonu (Stripe, PayPal, Braintree, Adyen, Razorpay, Mollie, iyzico,
+craftgate, PayU…) tespit edilirse koşar. Para-akışına özgü hataları arar; yokluk-temelli
+güvenilirlik kontrolleri (PAY-7/8/9/10) heuristiktir → düşük/orta güven, `.warden-ignore.yml` ile
+bastırılabilir.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| PAY-1 | Ödeme secret anahtarı sızıntısı (sk_live_/whsec_ … client bundle'da → P0 felaket) | + | ✅ | PCI-DSS 3.5 · OWASP A07 · CWE-798 |
+| PAY-2 | Webhook imza doğrulaması yok (sahte "ödeme başarılı") | + | ✅ | OWASP A08 · CWE-345 |
+| PAY-3 | Tutar istemciden alınıyor (fiyat manipülasyonu) | + | ✅ | OWASP A04 · CWE-840 |
+| PAY-4 | Charge oluşturma idempotency-key'siz (retry'da çift çekim) | + | ✅ | Stripe idempotency |
+| PAY-5 | Kart verisi (PAN/CVV) loglanıyor/sunucuda işleniyor | + | ✅ | PCI-DSS 3.2/3.4/10.2 |
+| PAY-7 | Mutabakat (reconciliation) job'ı yok (sağlayıcı ↔ DB tutarsızlığı) | + | ✅ | PCI-DSS 10.6 |
+| PAY-8 | Webhook olay tekilleştirme (dedup) yok (çift teslim/iade) | + | ✅ | CWE-696 |
+| PAY-9 | Kesinti/orphan ödeme koruması yok (çekilmiş ama karşılığı verilmemiş — para boşa) | + | ✅ | exactly-once fulfillment |
+| PAY-10 | Başarısız/asenkron ödeme olayı işlenmiyor (para limboda) | + | ✅ | Stripe event handling |
+
+> Ödeme entegrasyonu yoksa PAY hiç bulgu üretmez ve boyut "n/d" kalır.
+
 ---
 
 ## Çapraz Kesen Yetenekler (roadmap)

@@ -58,7 +58,7 @@ The character is generated art (via Magnific / Nano Banana Pro) — one consiste
   nothing writes "active" directly. Merging a fix doesn't auto-arm the knight — re-scan `main` does.
 - 🧩 **Framework-agnostic & zero-dependency** — drop the ES-module widget into any app.
 - 🌉 **One bridge, whole codebase** — `warden-bridge.mjs` maps Warden's entire scoreboard (A/B/C/D/
-  CLOUD/K8S/FE/AI) onto the same knight widget, no per-dimension custom code.
+  CLOUD/K8S/FE/AI/PAY) onto the same knight widget, no per-dimension custom code.
 
 ## Real-scan "Equip"
 
@@ -149,7 +149,7 @@ node warden-bridge.mjs --file ../warden-report/findings.json    # → state/ward
 | File | Role |
 |---|---|
 | `index.html` · `knight.js` · `knight.css` | The widget (zero-dependency ES module). |
-| `posture-warden.js` | Armor registry — one entry per Warden scan module (A/B/C/D/CLOUD/K8S/FE/AI). |
+| `posture-warden.js` | Armor registry — one entry per Warden scan module (A/B/C/D/CLOUD/K8S/FE/AI/PAY). |
 | `warden-bridge.mjs` | Reads `findings.json` → writes `state/warden-posture.json` (scan → armor). |
 | `warden-equip.mjs` | Backs the "Equip" flow — real scan + gaps file, or fast queue-only path. |
 | `loop.mjs` | Full cycle: scan → bridge, one command (used by the "re-scan" button). |

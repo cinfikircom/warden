@@ -15,6 +15,7 @@ export const MODULES = [
   "API", // OWASP API Top 10
   "FE", // Frontend Security
   "AI", // AI / LLM Security
+  "PAY", // Ödeme Güvenliği & Güvenilirliği (webhook/tutar/mutabakat/orphan ödeme)
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];

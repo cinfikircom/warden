@@ -7,12 +7,15 @@ import { dastModule } from "./modules/dast/index.ts";
 import { k8sModule } from "./modules/k8s/index.ts";
 import { cloudModule } from "./modules/cloud/index.ts";
 import { aiModule } from "./modules/ai/index.ts";
+import { payModule } from "./modules/pay/index.ts";
 
 /**
  * Yerleşik denetim modülleri.
- * A (parity) · B (SAST) · D (uyum + PCI/Privacy) · CLOUD (IaC) · K8S (manifest) · AI (LLM) · C (DAST, yetki kapılı).
- * CLOUD/K8S/AI yalnızca ilgili dosyalar (IaC/manifest/AI SDK) varsa koşar. C active:true → yalnızca yetki kapısı açıkken.
+ * A (parity) · B (SAST) · D (uyum + PCI/Privacy) · CLOUD (IaC) · K8S (manifest) · AI (LLM) ·
+ * PAY (ödeme güvenliği & güvenilirliği) · C (DAST, yetki kapılı).
+ * CLOUD/K8S/AI/PAY yalnızca ilgili dosyalar (IaC/manifest/AI SDK/ödeme entegrasyonu) varsa koşar.
+ * C active:true → yalnızca yetki kapısı açıkken.
  */
 export function defaultModules(): WardenModule[] {
-  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, dastModule];
+  return [parityModule, sastModule, importsModule, complianceModule, cloudModule, k8sModule, aiModule, payModule, dastModule];
 }

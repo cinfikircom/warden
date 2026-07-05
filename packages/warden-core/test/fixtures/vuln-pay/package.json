@@ -1,0 +1,8 @@
+{
+  "name": "vuln-pay-fixture",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.0",
+    "stripe": "^14.0.0"
+  }
+}

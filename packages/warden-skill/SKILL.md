@@ -9,7 +9,8 @@ description: >-
   fingerprint bazlı öncesi/sonrası delta ile doğrular, PR açar. Tetikleyiciler: "güvenlik denetimi",
   "production readiness", "parity kontrolü", "warden scan", "audit this project", "is this prod-ready",
   "güvenlik taraması", "kuyruğu işle", "security queue'yu işle", "warden knight kuyruğu",
-  "warden başlat", "warden'ı çalıştır", "warden aç", "hangi fazla başlayalım", "faz 1", "faz 2".
+  "warden başlat", "warden'ı çalıştır", "warden aç", "hangi fazla başlayalım", "faz 1", "faz 2",
+  "ödeme güvenliği", "ödeme testi", "payment security", "webhook güvenliği", "mutabakat", "reconciliation".
   Çağrılınca ÖNCE hangi fazla başlanacağını sorar (Faz 1 raporlama / Faz 2 tara-ve-onar).
   Varsayılan tamamen PASİF/read-only; aktif testler yetki kapısına bağlıdır.
 ---
@@ -69,6 +70,8 @@ Sonra faza göre dallan:
 - "Bu proje canlıya hazır mı?" / "production readiness" / "güvenlik denetimi yap"
 - Local ↔ production **parity** doğrulaması (kod/şema/konteyner/altyapı/operasyon)
 - Statik güvenlik taraması (secret, bağımlılık zafiyeti, zayıf kripto, authz, injection)
+- **Ödeme güvenliği & güvenilirliği** (bir ödeme entegrasyonu varsa otomatik): webhook imza doğrulama,
+  tutar manipülasyonu, idempotency/çift çekim, mutabakat (reconciliation) cron'u, kesinti/orphan ödeme, kart verisi
 - (Yetki ile) açıkta kalan dosya / security header / TLS / cookie aktif kontrolü
 
 ## Nasıl çalıştırılır

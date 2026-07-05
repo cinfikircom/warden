@@ -58,6 +58,8 @@ export const WARDEN_POSTURE = {
       desc:"Secrets, injection (SQL/SSRF/SSTI…), weak crypto, IDOR, deserialization.", quest:q("Code (SAST)") },
     { key:"D", kind:"warden", icon:"📜", name:"Charter of Law", realName:"Compliance & maturity", weight:10, z:8, status:"open",
       desc:"Observability, secret management, CI/CD, PCI-DSS, GDPR/KVKK.", quest:q("Compliance") },
+    { key:"PAY", kind:"warden", icon:"💰", name:"Treasury Vault", realName:"Payment security & reliability", weight:12, z:8, status:"open",
+      desc:"Webhook signature, client-set amount (price tampering), idempotency, reconciliation (mutabakat) cron, orphan/interrupted payment, card data.", quest:q("Payments") },
     { key:"CLOUD", kind:"warden", icon:"☁️", name:"Sky Ward", realName:"Cloud / IaC", weight:12, z:7, status:"open",
       desc:"Public buckets, IAM wildcards, open security groups, public DBs (Terraform).", quest:q("Cloud/IaC") },
     { key:"K8S", kind:"warden", icon:"⚓", name:"Fleet Anchor", realName:"Kubernetes", weight:8, z:6, status:"open",
