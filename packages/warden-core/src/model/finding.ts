@@ -22,6 +22,7 @@ export const MODULES = [
   "WEB", // CSRF, Clickjacking & Güvenlik Başlıkları (pasif: csrf yok / helmet yok / yansıtılan CORS+credentials)
   "FLOW", // İş-Akışı & Veri Bütünlüğü (transaction'sız çok-adımlı yazma / atomik olmayan sayaç / idempotent olmayan oluşturma)
   "EMAIL", // E-posta Güvenliği (header injection / HTML gövdeye kaçışsız girdi / TLS'siz SMTP) — SPF/DKIM/DMARC DAST/DNS'te
+  "UPLOAD", // Dosya Yükleme Güvenliği (kısıtsız tip / path traversal / boyut limiti yok / web-root'ta saklama)
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];

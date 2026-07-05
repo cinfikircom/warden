@@ -34,6 +34,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   WEB: "CSRF, Clickjacking & Security Headers",
   FLOW: "Workflow & Data Integrity",
   EMAIL: "Email Security",
+  UPLOAD: "File Upload Security",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */

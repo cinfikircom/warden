@@ -177,6 +177,21 @@ yüzeyi (nodemailer, SendGrid, SES, Mailgun, Postmark, Resend, smtplib, PHPMaile
 > bu, Modül C/DAST'ın (yetki kapılı, canlı hedef) yeridir, statik analizin değil.
 > Mailer yoksa EMAIL hiç bulgu üretmez.
 
+## Modül UPLOAD — Dosya Yükleme Güvenliği (pasif) · Faz 6+
+
+Neredeyse her SaaS/CRM/ERP dosya yükler; klasik yüksek-etkili açık sınıfı. Yalnızca bir yükleme
+yüzeyi (multer/formidable/busboy/express-fileupload/@fastify/multipart…) varsa koşar.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| UPLOAD-1 | Kısıtsız dosya tipi (fileFilter / uzantı-MIME whitelist yok → webshell) | + | ✅ | OWASP A04 · CWE-434 · ASVS 12.1 |
+| UPLOAD-2 | Kullanıcı dosya adıyla path traversal (originalname yola basename'siz giriyor) | + | ✅ | OWASP A01 · CWE-22 · CWE-23 |
+| UPLOAD-3 | Yükleme boyut limiti yok (DoS / disk doldurma) | + | ✅ | OWASP A04 · CWE-400 · CWE-770 |
+| UPLOAD-4 | Yüklenenler web-root'ta / çalıştırılabilir servis altında saklanıyor | + | ✅ | OWASP A04 · CWE-434 · CWE-552 |
+
+> Yükleme yüzeyi yoksa UPLOAD hiç bulgu üretmez. Absence bayrakları (UPLOAD-1/3) düşük güven —
+> whitelist/limit farklı bir katmanda (reverse-proxy, gateway) uygulanıyorsa `.warden-ignore.yml`.
+
 ---
 
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2

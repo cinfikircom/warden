@@ -12,6 +12,7 @@ import { collectPrivData, analyzePriv } from "../src/modules/priv/index.ts";
 import { collectWebData, analyzeWeb } from "../src/modules/web/index.ts";
 import { collectFlowData, analyzeFlow } from "../src/modules/flow/index.ts";
 import { collectEmailData, analyzeEmail } from "../src/modules/email/index.ts";
+import { collectUploadData, analyzeUpload } from "../src/modules/upload/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -230,5 +231,26 @@ describe("Modül EMAIL (e-posta güvenliği)", () => {
   it("TLS'siz SMTP → EMAIL-3", () => { expect(got).toContain("EMAIL-3-smtp-no-tls"); });
   it("mailer yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeEmail({ usesMail: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül UPLOAD (dosya yükleme güvenliği)", () => {
+  const data = collectUploadData(createFsContext(fix("vuln-upload")));
+  const findings = analyzeUpload(data);
+  const got = ids(findings);
+
+  it("yükleme yüzeyi (multer) tespit edilir; tip/boyut kısıtı yok", () => {
+    expect(data.usesUpload).toBe(true);
+    expect(data.hasTypeRestrict).toBe(false);
+    expect(data.hasSizeLimit).toBe(false);
+  });
+  it("kısıtsız dosya tipi → UPLOAD-1", () => { expect(got).toContain("UPLOAD-1-no-type-restriction"); });
+  it("kullanıcı adıyla path traversal → UPLOAD-2 P0", () => {
+    expect(findings.find((f) => f.id.startsWith("UPLOAD-2"))?.severity).toBe("P0");
+  });
+  it("boyut limiti yok → UPLOAD-3", () => { expect(got).toContain("UPLOAD-3-no-size-limit"); });
+  it("web-root'ta saklama → UPLOAD-4", () => { expect(got).toContain("UPLOAD-4-webroot-storage"); });
+  it("yükleme yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeUpload({ usesUpload: false, hasTypeRestrict: false, hasSizeLimit: false, files: [] })).toHaveLength(0);
   });
 });

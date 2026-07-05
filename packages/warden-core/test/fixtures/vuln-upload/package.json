@@ -1,0 +1,8 @@
+{
+  "name": "vuln-upload-fixture",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.0",
+    "multer": "^1.4.5"
+  }
+}
