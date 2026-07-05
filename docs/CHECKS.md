@@ -147,6 +147,21 @@ Fastify/Koa/route decorator) tespit edilirse koşar; yokluk-temelli bayraklar yo
 > Web yüzeyi yoksa WEB hiç bulgu üretmez. CSRF/başlık bayrakları düşük güven (heuristik) — token'lı
 > (çerezsiz) API'lerde CSRF alakalı değildir; `.warden-ignore.yml` ile bastırılabilir.
 
+## Modül FLOW — İş-Akışı & Veri Bütünlüğü (pasif) · Faz 6+
+
+CRM/ERP güvenilirliği: para/stok/durum tutan iş akışlarında sessiz veri bozulması — PAY-9'un
+(orphan ödeme) ödemeye özel olmayan genelleştirmesi. Handler gövdeleri süslü-parantez eşlemeyle
+çıkarılır; her kontrol handler bazında değerlendirilir. Yalnızca web yüzeyi varsa koşar.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| FLOW-1 | Transaction'sız çok-adımlı yazma (yarıda kesilirse yarım/tutarsız durum) | + | ✅ | CWE-662 · CWE-460 · ASVS 11.1 |
+| FLOW-2 | Atomik olmayan oku-değiştir-yaz sayaç/bakiye/stok (lost update / race) | + | ✅ | CWE-362 · CWE-567 · OWASP A04 |
+| FLOW-3 | İdempotent olmayan sipariş/transfer/rezervasyon oluşturma (çift-gönderim) | + | ✅ | CWE-799 · ASVS 11.1 |
+
+> Web yüzeyi yoksa FLOW hiç bulgu üretmez. Bulgular düşük güven (heuristik) — bilinçli tekil yazma
+> ya da kuyruğa dayalı akışlarda `.warden-ignore.yml` ile bastırılabilir.
+
 ---
 
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2

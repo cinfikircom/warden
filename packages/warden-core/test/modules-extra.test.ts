@@ -10,6 +10,7 @@ import { collectAuthData, analyzeAuth } from "../src/modules/auth/index.ts";
 import { collectApiData, analyzeApi } from "../src/modules/api/index.ts";
 import { collectPrivData, analyzePriv } from "../src/modules/priv/index.ts";
 import { collectWebData, analyzeWeb } from "../src/modules/web/index.ts";
+import { collectFlowData, analyzeFlow } from "../src/modules/flow/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -195,5 +196,22 @@ describe("Modül WEB (CSRF, clickjacking & güvenlik başlıkları)", () => {
   it("yansıtılan CORS origin + credentials → WEB-3", () => { expect(got).toContain("WEB-3-cors-reflect-credentials"); });
   it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeWeb({ usesWeb: false, hasCookieSession: false, hasMutRoute: false, hasCsrf: false, hasSecHeaders: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül FLOW (iş-akışı & veri bütünlüğü)", () => {
+  const data = collectFlowData(createFsContext(fix("vuln-flow")));
+  const findings = analyzeFlow(data);
+  const got = ids(findings);
+
+  it("web yüzeyi + handler gövdeleri çıkarılır", () => {
+    expect(data.usesWeb).toBe(true);
+    expect(data.files.some((f) => f.handlers.length >= 2)).toBe(true);
+  });
+  it("transaction'sız çok-adımlı yazma → FLOW-1", () => { expect(got).toContain("FLOW-1-no-transaction"); });
+  it("atomik olmayan oku-değiştir-yaz → FLOW-2", () => { expect(got).toContain("FLOW-2-lost-update"); });
+  it("idempotent olmayan kritik oluşturma → FLOW-3", () => { expect(got).toContain("FLOW-3-no-idempotency"); });
+  it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeFlow({ usesWeb: false, files: [] })).toHaveLength(0);
   });
 });

@@ -20,6 +20,7 @@ export const MODULES = [
   "AUTH", // Kimlik & Oturum Sertleştirme (MFA/reset-token/cookie/JWT/brute-force/parola politikası)
   "PRIV", // Veri Gizliliği & Denetim İzi (PII log/URL, at-rest şifreleme, KVKK/GDPR erasure, audit trail)
   "WEB", // CSRF, Clickjacking & Güvenlik Başlıkları (pasif: csrf yok / helmet yok / yansıtılan CORS+credentials)
+  "FLOW", // İş-Akışı & Veri Bütünlüğü (transaction'sız çok-adımlı yazma / atomik olmayan sayaç / idempotent olmayan oluşturma)
 ] as const;
 
 export type ModuleId = (typeof MODULES)[number];
