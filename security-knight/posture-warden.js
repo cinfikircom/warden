@@ -68,6 +68,8 @@ export const WARDEN_POSTURE = {
       desc:"Excessive data exposure (SELECT *), missing rate limiting, unbounded queries (no pagination), verbose errors, GraphQL depth/complexity limits.", quest:q("API security") },
     { key:"PRIV", kind:"warden", icon:"📖", name:"Chronicle Ledger", realName:"Data privacy & audit trail", weight:10, z:8, status:"open",
       desc:"PII in logs/URLs, at-rest encryption for high-sensitive fields, KVKK/GDPR erasure (right to be forgotten), audit trail of who accessed/changed data.", quest:q("Data privacy & audit") },
+    { key:"WEB", kind:"warden", icon:"⛨", name:"Sigil Ward", realName:"CSRF, clickjacking & security headers", weight:9, z:9, status:"open",
+      desc:"Missing CSRF protection on cookie-session writes, absent security headers (helmet/X-Frame-Options/HSTS/CSP → clickjacking), reflected CORS origin with credentials.", quest:q("Web hardening") },
     { key:"CLOUD", kind:"warden", icon:"☁️", name:"Sky Ward", realName:"Cloud / IaC", weight:12, z:7, status:"open",
       desc:"Public buckets, IAM wildcards, open security groups, public DBs (Terraform).", quest:q("Cloud/IaC") },
     { key:"K8S", kind:"warden", icon:"⚓", name:"Fleet Anchor", realName:"Kubernetes", weight:8, z:6, status:"open",

@@ -132,6 +132,21 @@ koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
 
 > PII yoksa PRIV hiç bulgu üretmez.
 
+## Modül WEB — CSRF, Clickjacking & Güvenlik Başlıkları (pasif) · Faz 6+
+
+Sunucu-taraflı web sertleştirme; Modül B'nin (CORS/XSS/CSP) ve C/DAST'ın (canlı header) statik
+tamamlayıcısı — özellikle **CSRF** başka hiçbir modülde yok. Yalnızca bir web yüzeyi (Express/
+Fastify/Koa/route decorator) tespit edilirse koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| WEB-1 | CSRF koruması yok (çerez-tabanlı oturum + state-değiştiren route, token/SameSite=strict yok) | + | ✅ | OWASP A01 · CWE-352 · ASVS 4.2 |
+| WEB-2 | Güvenlik başlıkları / clickjacking koruması yok (helmet/X-Frame-Options/HSTS/CSP/nosniff) | + | ✅ | OWASP A05 · CWE-1021 · CWE-693 |
+| WEB-3 | Yansıtılan CORS origin + credentials (origin: req.origin → herkese kimlikli erişim) | + | ✅ | OWASP A05 · CWE-942 |
+
+> Web yüzeyi yoksa WEB hiç bulgu üretmez. CSRF/başlık bayrakları düşük güven (heuristik) — token'lı
+> (çerezsiz) API'lerde CSRF alakalı değildir; `.warden-ignore.yml` ile bastırılabilir.
+
 ---
 
 ## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2

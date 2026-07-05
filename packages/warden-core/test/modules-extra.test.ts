@@ -9,6 +9,7 @@ import { collectAccessData, analyzeAccess } from "../src/modules/access/index.ts
 import { collectAuthData, analyzeAuth } from "../src/modules/auth/index.ts";
 import { collectApiData, analyzeApi } from "../src/modules/api/index.ts";
 import { collectPrivData, analyzePriv } from "../src/modules/priv/index.ts";
+import { collectWebData, analyzeWeb } from "../src/modules/web/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -174,5 +175,25 @@ describe("Modül PRIV (veri gizliliği & denetim izi)", () => {
   it("audit trail yok → PRIV-5", () => { expect(got).toContain("PRIV-5-no-audit-trail"); });
   it("PII yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzePriv({ usesPii: false, hasSensitiveHigh: false, hasEncryption: false, hasErasure: false, hasAudit: false, usesWeb: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül WEB (CSRF, clickjacking & güvenlik başlıkları)", () => {
+  const data = collectWebData(createFsContext(fix("vuln-web")));
+  const findings = analyzeWeb(data);
+  const got = ids(findings);
+
+  it("web yüzeyi + çerez oturumu + yazma route'u tespit edilir", () => {
+    expect(data.usesWeb).toBe(true);
+    expect(data.hasCookieSession).toBe(true);
+    expect(data.hasMutRoute).toBe(true);
+    expect(data.hasCsrf).toBe(false);
+    expect(data.hasSecHeaders).toBe(false);
+  });
+  it("CSRF koruması yok → WEB-1", () => { expect(got).toContain("WEB-1-no-csrf"); });
+  it("güvenlik başlıkları / clickjacking koruması yok → WEB-2", () => { expect(got).toContain("WEB-2-no-security-headers"); });
+  it("yansıtılan CORS origin + credentials → WEB-3", () => { expect(got).toContain("WEB-3-cors-reflect-credentials"); });
+  it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeWeb({ usesWeb: false, hasCookieSession: false, hasMutRoute: false, hasCsrf: false, hasSecHeaders: false, files: [] })).toHaveLength(0);
   });
 });

@@ -1,0 +1,9 @@
+{
+  "name": "vuln-web-fixture",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.0",
+    "express-session": "^1.18.0",
+    "cors": "^2.8.5"
+  }
+}

@@ -31,6 +31,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   ACCESS: "Access Control & Tenant Isolation",
   AUTH: "Identity & Session Hardening",
   PRIV: "Data Privacy & Audit Trail",
+  WEB: "CSRF, Clickjacking & Security Headers",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */
