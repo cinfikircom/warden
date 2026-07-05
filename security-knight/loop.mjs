@@ -13,11 +13,16 @@
  * =========================================================================
  */
 import { execFileSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));      // security-knight/
-const REPO = join(ROOT, "..");                             // Warden repo root (unified)
+const REPO = join(ROOT, "..");                             // panelin bir üstü (kurulu projede = hedef proje)
+// `pnpm warden` yalnız Warden monoreposunda tanımlı. Kurulu bir projede panel `.warden-home`'dan
+// (init'in yazdığı) Warden repo kökünü okur; yoksa monorepo içindeyiz → REPO.
+const HOME_FILE = join(ROOT, ".warden-home");
+const WARDEN_HOME = existsSync(HOME_FILE) ? readFileSync(HOME_FILE, "utf8").trim() : REPO;
 function args(){ const a={}; const v=process.argv.slice(2);
   for(let i=0;i<v.length;i++){ if(!v[i].startsWith("--")) continue; const k=v[i].slice(2);
     const n=v[i+1]; if(n===undefined||n.startsWith("--")) a[k]=true; else { a[k]=n; i++; } } return a; }
@@ -31,7 +36,7 @@ async function main(){
 
   // 1) Warden Scan
   if (!a["no-scan"]){
-    try { console.log("  1/2 Warden taraması…"); run("pnpm", ["warden", "scan", "--target", target], REPO); console.log("      ✓ tarandı"); }
+    try { console.log("  1/2 Warden taraması…"); run("pnpm", ["--dir", WARDEN_HOME, "warden", "scan", "--target", target], WARDEN_HOME); console.log("      ✓ tarandı"); }
     catch (e){ console.log("      ⚠ tarama atlandı (pnpm/warden yok?) — mevcut findings.json kullanılacak"); }
   } else console.log("  1/2 tarama atlandı (--no-scan)");
 

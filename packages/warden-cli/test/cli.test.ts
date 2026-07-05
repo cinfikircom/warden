@@ -67,6 +67,12 @@ describe("Warden CLI smoke", () => {
       expect(existsSync(join(dir, "security-knight", "knight.js"))).toBe(true);
       // kaynak reponun kendi çalışma-zamanı durumu (jobs/gaps/vb.) asla taşınmaz — hedef temiz başlar.
       expect(existsSync(join(dir, "security-knight", "state", "jobs.jsonl"))).toBe(false);
+      // .warden-home Warden repo kökünü göstermeli → kurulu panel `pnpm --dir <home> warden` ile tarar.
+      const homeFile = join(dir, "security-knight", ".warden-home");
+      expect(existsSync(homeFile)).toBe(true);
+      const home = readFileSync(homeFile, "utf8").trim();
+      expect(existsSync(join(home, "package.json"))).toBe(true);
+      expect(existsSync(join(home, "packages", "warden-cli"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

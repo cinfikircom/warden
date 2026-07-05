@@ -61,7 +61,8 @@ async function copyPanel(targetRoot: string): Promise<"yazıldı" | "atlandı" |
   const panelDest = join(targetRoot, "security-knight");
   if (existsSync(panelDest)) return "atlandı";
   const here = dirname(fileURLToPath(import.meta.url));
-  const panelSrc = join(here, "..", "..", "..", "security-knight");
+  const repoRoot = join(here, "..", "..", ".."); // Warden monorepo kökü — `pnpm warden` yalnız burada tanımlı
+  const panelSrc = join(repoRoot, "security-knight");
   if (!existsSync(panelSrc)) return "kaynak-yok"; // paketlenmiş dağıtımda panel yoksa sessizce geç
   await cp(panelSrc, panelDest, {
     recursive: true,
@@ -73,6 +74,9 @@ async function copyPanel(targetRoot: string): Promise<"yazıldı" | "atlandı" |
     },
   });
   mkdirSync(join(panelDest, "state"), { recursive: true }); // hedef kendi (boş) state'iyle başlar
+  // Kurulu panelin tarama scriptleri (loop.mjs / warden-equip.mjs) `pnpm warden`'ı yalnız Warden
+  // reposundan bulabilir (hedef projede tanımlı değil). Repo kökünü yaz → `pnpm --dir <home> warden`.
+  writeFileSync(join(panelDest, ".warden-home"), repoRoot + "\n", "utf8");
   return "yazıldı";
 }
 

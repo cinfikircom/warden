@@ -8,7 +8,9 @@ description: >-
   "ajana kuyruğa al" görevlerini işler: bağımsız bulguları paralel alt-ajanlarla düzeltir,
   fingerprint bazlı öncesi/sonrası delta ile doğrular, PR açar. Tetikleyiciler: "güvenlik denetimi",
   "production readiness", "parity kontrolü", "warden scan", "audit this project", "is this prod-ready",
-  "güvenlik taraması", "kuyruğu işle", "security queue'yu işle", "warden knight kuyruğu".
+  "güvenlik taraması", "kuyruğu işle", "security queue'yu işle", "warden knight kuyruğu",
+  "warden başlat", "warden'ı çalıştır", "warden aç", "hangi fazla başlayalım", "faz 1", "faz 2".
+  Çağrılınca ÖNCE hangi fazla başlanacağını sorar (Faz 1 raporlama / Faz 2 tara-ve-onar).
   Varsayılan tamamen PASİF/read-only; aktif testler yetki kapısına bağlıdır.
 ---
 
@@ -29,6 +31,38 @@ Bu skill çift-kullanımlı yeteneklere sahiptir. Kurallar **harfiyen** uygulan�
 6. Hedefte **mutasyon yok**: deploy/migrate/restart yok; yalnızca inspect/diff/dry-run.
 
 > Skill açılışında bu ilkeleri kullanıcıya kısaca hatırlat. Yetkisiz hedefte aktif test reddedilir.
+
+## Başlangıç — hangi fazla başlayalım? (skill çağrılınca İLK bunu yap)
+
+Kullanıcı bu skill'i bir projede çağırınca (`/warden`, "warden başlat", "warden'ı çalıştır", ya da
+Warden Knight panelinden) **önce hangi fazla başlamak istediğini SOR** — kendiliğinden tarama/düzeltme
+başlatma. `AskUserQuestion` ile iki seçenek sun:
+
+- **Faz 1 — Keşif & Raporlama.** Tüm sistemi tara, gedikleri (eksik/hatalı/riskli) şiddet sırasına
+  göre raporla. **Hiçbir değişiklik yapma.** Sadece "sistemimde ne var, neyi kapatmalıyım" cevabı.
+- **Faz 2 — Tara & Onar.** Aynı taramayı yap, sonra bağımsız gedikleri **paralel alt-ajanlarla,
+  sıfır zararla** kapat (ayrı dal + projenin kendi testleri + fingerprint-delta doğrulaması + PR —
+  asla doğrudan `main`). "Bul ve benim yerime düzelt."
+
+Kullanıcı seçtikten sonra, **her iki fazda da** paneli başlat (Chrome otomatik açılır, panel
+açılışta **kendiliğinden** tam taramayı tetikler — çıplak şövalye → skora göre giydirilir):
+
+```bash
+# kurulu projenin kökünden, ARKA PLANDA başlat (server.mjs tarayıcıyı otomatik açar):
+node security-knight/server.mjs            # SK_NO_OPEN=1 ile tarayıcı-açmayı kapatabilirsin
+```
+
+Sonra faza göre dallan:
+
+- **Faz 1 seçildiyse:** tarama bitince `warden-report/report.md` + panelin "Tarama Raporu"nu
+  şiddet sıralı özetle. P0/P1 için `remediation-playbook.md` prompt'larını göster. **Dur** — kod
+  değiştirme. Kullanıcı isterse sonra Faz 2'ye geçebileceğini söyle.
+- **Faz 2 seçildiyse:** tarama bitince aşağıdaki **"Otomatik Düzeltme Prosedürü"ne** geç. Kullanıcı
+  panelde belirli bir zırha "🤖 Ajana kuyruğa al" derse o boyut kuyruğa düşer; "kuyruğu işle"
+  dediğinde (veya hemen, kullanıcı onaylarsa) prosedürü çalıştır. Yetki kapısı kapalıysa aktif/DAST
+  düzeltmelerini atla, yalnızca pasif bulguları onar.
+
+> Panel yalnızca kendi `127.0.0.1` backend'ine konuşur; dışarı hiçbir veri gitmez (telemetri yok).
 
 ## Ne zaman kullanılır
 

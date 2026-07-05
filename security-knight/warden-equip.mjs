@@ -23,11 +23,16 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url)); // security-knight/
-const REPO = join(ROOT, "..");
+const REPO = join(ROOT, ".."); // panelin bir üstü (kurulu projede = hedef proje)
+// `pnpm warden` yalnız Warden monoreposunda tanımlı. Kurulu projede `.warden-home` (init'in yazdığı)
+// Warden repo kökünü verir → `pnpm --dir <home> warden`; yoksa monorepo içindeyiz → REPO.
+const HOME_FILE = join(ROOT, ".warden-home");
+const WARDEN_HOME = existsSync(HOME_FILE) ? readFileSync(HOME_FILE, "utf8").trim() : REPO;
 const STATE = join(ROOT, "state");
 const GAPS_DIR = join(STATE, "warden-gaps");
 const JOBS_FILE = join(STATE, "jobs.jsonl");
@@ -51,7 +56,7 @@ async function queueOnly(module, target) {
   // tazelemiştir) prompts okur ve hemen kuyruğa yazar (bkz. dosya başındaki yarış-durumu notu).
   let fingerprints = [];
   try {
-    const out = run("pnpm", ["warden", "prompts", "--target", target, "--module", module], REPO);
+    const out = run("pnpm", ["--dir", WARDEN_HOME, "warden", "prompts", "--target", target, "--module", module], WARDEN_HOME);
     const jsonStart = out.indexOf("{");
     fingerprints = (JSON.parse(out.slice(jsonStart)).prompts ?? []).map((p) => p.fingerprint);
   } catch (e) { console.log("⚠ prompts alınamadı (önce /api/warden/scan gerekebilir): " + String(e.message).split("\n")[0]); }
@@ -73,7 +78,7 @@ async function scanAndWriteGaps(module, target) {
   console.log(`⚔️  Warden Equip — ${module} zırhı için gerçek tarama başlıyor`);
 
   // 1) Tam tarama — asla --module (diğer boyutların doğruluğunu bozmasın).
-  try { console.log("  1/3 Warden taraması…"); run("pnpm", ["warden", "scan", "--target", target], REPO); console.log("      ✓ tarandı"); }
+  try { console.log("  1/3 Warden taraması…"); run("pnpm", ["--dir", WARDEN_HOME, "warden", "scan", "--target", target], WARDEN_HOME); console.log("      ✓ tarandı"); }
   catch { console.log("      ⚠ tarama başarısız/atlandı — mevcut findings.json kullanılacak"); }
 
   // 2) Köprü: scan → tüm tahta (her modül, yalnız bu değil).
