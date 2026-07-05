@@ -8,10 +8,9 @@ the open, but a vulnerability is disclosed responsibly first.*
 
 **Please do not open a public issue for security vulnerabilities in Warden itself.**
 
-Instead, report privately via one of:
-
-- **GitHub Security Advisories** — [open a private report](https://github.com/cinfikircom/warden/security/advisories/new) (preferred)
-- **Email** — security@cinfikir.com
+Instead, report privately through **GitHub Security Advisories** —
+[open a private report](https://github.com/cinfikircom/warden/security/advisories/new). This keeps
+the disclosure between you and the maintainers until a fix ships.
 
 Please include:
 
