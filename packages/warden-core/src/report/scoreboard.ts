@@ -29,6 +29,7 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   AI: "AI / LLM Security",
   PAY: "Payment Security & Reliability",
   ACCESS: "Access Control & Tenant Isolation",
+  AUTH: "Identity & Session Hardening",
 };
 
 /** Şiddete göre puan düşüşü ağırlığı. */

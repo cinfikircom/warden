@@ -169,6 +169,23 @@ heuristik → düşük/orta güvenle işaretlenir, `.warden-ignore.yml` ile bast
 
 > Web/API yüzeyi yoksa ACCESS hiç bulgu üretmez. Multi-stack: Express/Fastify/Nest · Django · Rails · Laravel · Prisma/Sequelize/TypeORM/Mongoose.
 
+## Modül AUTH — Kimlik & Oturum Sertleştirme (pasif) · Faz 6+
+
+Hesap devri (account takeover) yüzeyi. Yalnızca bir kimlik/oturum yüzeyi (login/parola/jwt/session)
+tespit edilirse koşar. Yokluk-temelli kontroller (AUTH-1/5/6) **yorumsuz kodda** aranır (yorumdaki
+söz bastırmasın) ve düşük güvenle işaretlenir.
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| AUTH-1 | MFA/2FA yok (login var, ikinci faktör yok) | + | ✅ | OWASP A07 · ASVS 2.8 |
+| AUTH-2 | Tahmin edilebilir reset/doğrulama token'ı (Math.random/Date.now) | + | ✅ | CWE-330 · CWE-640 |
+| AUTH-3 | Güvensiz oturum çerezi (httpOnly/secure/sameSite eksik/false) | + | ✅ | OWASP A05 · CWE-1004 |
+| AUTH-4 | JWT süresiz (expiry yok) → çalınan token sonsuz geçerli | + | ✅ | CWE-613 |
+| AUTH-5 | Login'de brute-force koruması yok (rate-limit/lockout) | + | ✅ | OWASP A07 · CWE-307 |
+| AUTH-6 | Zayıf parola politikası (hash var, güç/pwned kontrolü yok) | + | ✅ | ASVS 2.1 · NIST 800-63B |
+
+> Kimlik yüzeyi yoksa AUTH hiç bulgu üretmez.
+
 ---
 
 ## Çapraz Kesen Yetenekler (roadmap)

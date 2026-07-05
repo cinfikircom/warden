@@ -6,6 +6,7 @@ import { collectIacFiles, analyzeCloud } from "../src/modules/cloud/index.ts";
 import { collectAiData, analyzeAi } from "../src/modules/ai/index.ts";
 import { collectPayData, analyzePay } from "../src/modules/pay/index.ts";
 import { collectAccessData, analyzeAccess } from "../src/modules/access/index.ts";
+import { collectAuthData, analyzeAuth } from "../src/modules/auth/index.ts";
 
 const fix = (n: string): string => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
 const ids = (fs: readonly { id: string }[]): string[] => fs.map((f) => f.id.split(":")[0] ?? "");
@@ -111,5 +112,26 @@ describe("Modül ACCESS (erişim kontrolü & kiracı izolasyonu)", () => {
   it("rol kontrolsüz admin aksiyonu → ACC-4", () => { expect(got).toContain("ACC-4-privileged-no-role"); });
   it("web yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
     expect(analyzeAccess({ usesWeb: false, usesTenancy: false, usesAuth: false, files: [] })).toHaveLength(0);
+  });
+});
+
+describe("Modül AUTH (kimlik & oturum sertleştirme)", () => {
+  const data = collectAuthData(createFsContext(fix("vuln-auth")));
+  const findings = analyzeAuth(data);
+  const got = ids(findings);
+
+  it("kimlik yüzeyi tespit edilir", () => {
+    expect(data.usesAuth).toBe(true);
+    expect(data.hasLogin).toBe(true);
+    expect(data.hasPasswordHash).toBe(true);
+  });
+  it("MFA yok → AUTH-1", () => { expect(got).toContain("AUTH-1-no-mfa"); });
+  it("tahmin edilebilir reset token → AUTH-2", () => { expect(got).toContain("AUTH-2-weak-reset-token"); });
+  it("güvensiz oturum çerezi → AUTH-3", () => { expect(got).toContain("AUTH-3-insecure-cookie"); });
+  it("süresiz JWT → AUTH-4", () => { expect(got).toContain("AUTH-4-jwt-no-expiry"); });
+  it("brute-force koruması yok → AUTH-5", () => { expect(got).toContain("AUTH-5-no-brute-force"); });
+  it("zayıf parola politikası → AUTH-6", () => { expect(got).toContain("AUTH-6-weak-password-policy"); });
+  it("kimlik yüzeyi yoksa HİÇ bulgu yok (gürültü guard'ı)", () => {
+    expect(analyzeAuth({ usesAuth: false, hasLogin: false, hasMfa: false, hasBruteForce: false, hasPasswordHash: false, hasPasswordStrength: false, files: [] })).toHaveLength(0);
   });
 });

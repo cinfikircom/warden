@@ -62,6 +62,8 @@ export const WARDEN_POSTURE = {
       desc:"Webhook signature, client-set amount (price tampering), idempotency, reconciliation (mutabakat) cron, orphan/interrupted payment, card data.", quest:q("Payments") },
     { key:"ACCESS", kind:"warden", icon:"🗝️", name:"Gatekeeper's Seal", realName:"Access control & tenant isolation", weight:14, z:8, status:"open",
       desc:"Multi-tenant isolation (missing tenant scope), endpoint authorization, mass assignment (over-posting), privileged-action role checks. OWASP #1.", quest:q("Access control") },
+    { key:"AUTH", kind:"warden", icon:"🔑", name:"Warden's Keyring", realName:"Identity & session hardening", weight:11, z:8, status:"open",
+      desc:"MFA/2FA absence, predictable reset tokens, insecure session cookies, JWT without expiry, login brute-force protection, weak password policy.", quest:q("Identity & session") },
     { key:"CLOUD", kind:"warden", icon:"☁️", name:"Sky Ward", realName:"Cloud / IaC", weight:12, z:7, status:"open",
       desc:"Public buckets, IAM wildcards, open security groups, public DBs (Terraform).", quest:q("Cloud/IaC") },
     { key:"K8S", kind:"warden", icon:"⚓", name:"Fleet Anchor", realName:"Kubernetes", weight:8, z:6, status:"open",
