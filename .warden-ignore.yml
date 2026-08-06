@@ -1,10 +1,27 @@
 # Warden waiver dosyası — gerekçeli bulgu bastırma.
 # Buradaki bulgular RAPORDAN ve CI gate'inden (--fail-on) düşülür; ama sessizce
 # kaybolmaz: her uygulanan waiver audit log'a ve CLI özetine yazılır.
-# Selector'lar (fingerprint / check / id) AND mantığıyla eşleşir; her girdi `reason` ister.
+# Selector'lar (fingerprint / check / id / path) AND mantığıyla eşleşir; her girdi `reason` ister.
 #
 # NOT: Bu dosya Warden'ın KENDİ reposuna özeldir — tarayıcı kendi tespit-kural
 # kaynağını taradığında çıkan self-match'leri kapatır. Başka projeye taşınmaz.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# KÖK NEDEN ve GEÇİCİLİK
+#
+# Aşağıdaki `path`+`check` waiver'larının hepsi TEK bir kök nedene dayanır: Warden'ın
+# kural dosyaları zafiyet desenlerini REGEX LİTERALİ olarak taşır (`/eval\s*\(/`,
+# `dangerouslySetInnerHTML`, `AKIA[0-9A-Z]{16}` …). Satır-bazlı tarayıcı bunları
+# çalıştırılan koddan ayırt edemiyor.
+#
+# Doğru çözüm waiver değil, BAĞLAM FARKINDALIĞI: bir eşleşme regex literali ya da
+# string sabiti içindeyse kural tanımıdır, çalıştırılan kod değil. Bu, planlanan taint /
+# veri-akışı katmanının işidir (bkz. docs/STRIX-ADOPTION.md §1.2). O katman geldiğinde
+# buradaki waiver'ların büyük kısmı GEREKSİZLEŞİR ve kaldırılmalıdır.
+#
+# Bu yüzden her biri `path` ile Warden'ın kendi kaynağına ve `check` ile tek bir kontrole
+# daraltıldı — çıplak `check` waiver'ı aynı kontrolün GERÇEK bulgularını da yutardı.
+# ─────────────────────────────────────────────────────────────────────────────
 
 waivers:
   # D7, kart verisi (CVV/CVC/PAN) saklama dedektörü. Warden'ın kendi kaynağı bu
@@ -20,15 +37,55 @@ waivers:
   - fingerprint: "4e78860aa998bea8"
     reason: "SHA1 yalnızca fingerprintOf() içerik özeti için; güvenlik amaçlı hash değil."
 
-  # FE-3, DOM-XSS sink dedektörleri. Aşağıdaki dosyalar Warden'ın KURAL TANIMLARIDIR:
-  # `dangerouslySetInnerHTML` ve `innerHTML` metinleri birer regex deseni olarak geçer,
-  # tarayıcıda çalışan kod değildir. Fingerprint ile daraltıldı — check bazlı geniş bir
-  # waiver, gerçek FE-3 bulgularını da sessizce yutardı.
-  - fingerprint: "0d046b7a5cafbfb0"
-    reason: "modules/fe/rules.ts — FE-dangerous-html kuralının kendi desen tanımı."
-  - fingerprint: "02a514c7b0a8d01b"
-    reason: "modules/fe/rules.ts — FE-vue-vhtml kuralının kendi desen tanımı."
-  - fingerprint: "7bb7aa624fa03207"
-    reason: "modules/sast/rules.ts — FE kurallarının taşındığını belirten göç yorumu."
-  - fingerprint: "b42d724d8a06f3aa"
-    reason: "modules/fe/rules.ts — FE-innerhtml-sink kuralının kendi desen tanımı."
+  # ── SAST kural kataloğu: modules/sast/rules.ts ──────────────────────────────
+  # Bu dosya B3/B4/B6/B8 desenlerinin TANIMIDIR. İçindeki `md5`, `eval(`,
+  # `node-serialize`, `alg:none` metinleri birer regex parçasıdır.
+  - path: "packages/warden-core/src/modules/sast/rules.ts"
+    check: "B3"
+    reason: "Zayıf-hash kurallarının kendi desen tanımı (md5/sha1 regex literalleri)."
+  - path: "packages/warden-core/src/modules/sast/rules.ts"
+    check: "B4"
+    reason: "JWT/auth kurallarının kendi desen tanımı (alg:none, zayıf secret regex'leri)."
+  - path: "packages/warden-core/src/modules/sast/rules.ts"
+    check: "B6"
+    reason: "Injection kurallarının kendi desen tanımı (SQL/komut/eval/SSTI/NoSQL/LDAP regex'leri)."
+  - path: "packages/warden-core/src/modules/sast/rules.ts"
+    check: "B8"
+    reason: "Güvensiz-deserialization kuralının kendi desen tanımı (node-serialize/vm regex'leri)."
+
+  # ── Secret dedektörünün kendi imza tablosu ──────────────────────────────────
+  # git-history.ts ve diğer modüller AKIA…/ghp_… gibi sağlayıcı imzalarını desen
+  # olarak taşır; bunlar gerçek anahtar değil, ARAMA DESENİDİR. PLACEHOLDER_SECRET
+  # listesi de aynı sebeple eşleşir.
+  - path: "packages/warden-core/src/modules/**"
+    check: "B1"
+    reason: "Secret tarayıcısının kendi sağlayıcı-imza desenleri ve placeholder listesi — gerçek anahtar değil."
+
+  # ── Modül kural tanımları (ACCESS / PAY / EMAIL) ────────────────────────────
+  - path: "packages/warden-core/src/modules/access/index.ts"
+    check: "ACC-3"
+    reason: "Mass-assignment kuralının kendi desen tanımı."
+  - path: "packages/warden-core/src/modules/pay/index.ts"
+    check: "PAY-5"
+    reason: "Ödeme kuralının kendi desen tanımı — Warden ödeme almaz."
+  - path: "packages/warden-core/src/modules/pay/index.ts"
+    check: "PAY-12"
+    reason: "3DS/SCA kuralının kendi desen tanımı — Warden ödeme almaz."
+  - path: "packages/warden-core/src/modules/email/index.ts"
+    check: "EMAIL-3"
+    reason: "SMTP/TLS kuralının kendi desen tanımı — Warden e-posta göndermez."
+
+  # ── FE (DOM-XSS) kural tanımları ────────────────────────────────────────────
+  # Eskiden dört ayrı fingerprint waiver'ıydı; fingerprint kural metni her
+  # düzenlendiğinde kayıyor ve waiver sessizce ölüyordu. `path`+`check` dayanıklı.
+  - path: "packages/warden-core/src/modules/fe/rules.ts"
+    check: "FE-3"
+    reason: "DOM-XSS sink kurallarının kendi desen tanımları (dangerouslySetInnerHTML/v-html/innerHTML)."
+  - path: "packages/warden-core/src/modules/sast/rules.ts"
+    check: "FE-3"
+    reason: "FE kurallarının modules/fe/'ye taşındığını belirten göç yorumu."
+
+  # ── K8S kural tanımı ────────────────────────────────────────────────────────
+  - path: "packages/warden-core/src/modules/k8s/index.ts"
+    check: "K8S-plain-secret"
+    reason: "Manifest düz-secret kuralının kendi desen tanımı."

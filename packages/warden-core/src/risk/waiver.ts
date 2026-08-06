@@ -18,6 +18,9 @@ import type { Finding } from "../model/finding.ts";
  *     - check: "B3"                # daha geniş; tüm B3 bulguları
  *       reason: "SHA1 yalnızca fingerprint için, güvenlik amaçlı değil."
  *       expires: "2026-12-31"      # opsiyonel; geçmişse waiver pasif sayılır
+ *     - path: "src/legacy/**"      # yol glob'u; check ile daraltmak önerilir
+ *       check: "B6"
+ *       reason: "Devralınan modül; ayrı bir iş kaleminde yeniden yazılıyor."
  */
 
 export const WAIVER_FILE = ".warden-ignore.yml";
@@ -29,10 +32,51 @@ export interface Waiver {
   readonly check?: string;
   /** İnsan-okur stabil id, örn. "B3-weak-hash". */
   readonly id?: string;
+  /**
+   * Kanıt yolu glob'u, örn. `src/legacy/**` (bir alt ağacın tamamı).
+   * `*` tek segment içinde, `**` segment sınırı aşarak eşleşir; `?` tek karakter.
+   *
+   * Bulgu ANCAK TÜM kanıt konumları bu glob'a uyuyorsa waive edilir — bir kısmı dışarıdaysa
+   * bulgu ayakta kalır. Kasıtlı olarak muhafazakâr: waiver'ın en büyük riski gerçek bir bulguyu
+   * sessizce yutmasıdır, ve bulgu bölünemez bir birim olduğu için kısmi eşleşmede susmak
+   * yanlış tarafta hata yapmak olurdu.
+   */
+  readonly path?: string;
   /** Zorunlu: neden bastırıldığı (denetim izi). */
   readonly reason: string;
   /** Opsiyonel son geçerlilik (YYYY-MM-DD). Geçmişse waiver uygulanmaz. */
   readonly expires?: string;
+}
+
+/** Glob uzunluk tavanı — patolojik desenlerin regex motorunu yormasına karşı ucuz sigorta. */
+const MAX_GLOB_LEN = 200;
+
+/**
+ * Sınırlı glob → RegExp. Kullanıcı girdisi doğrudan regex olarak alınmaz: tüm regex
+ * metakarakterleri kaçırılır, yalnızca `*` / `**` / `?` anlam taşır. Böylece `.warden-ignore.yml`
+ * bir ReDoS ya da beklenmedik-eşleşme yüzeyine dönüşmez.
+ */
+export function globToRegExp(glob: string): RegExp {
+  // Tek geçişte token'la: `**/` · `**` · `*` · `?` özel, geri kalan her karakter literal.
+  // (Ara yer-tutucu numarası yok — yer tutucular kaynağa görünmez karakter sızdırıyordu.)
+  let body = "";
+  for (let i = 0; i < glob.length; i++) {
+    if (glob.startsWith("**/", i)) {
+      // Sıfır segment de eşleşmeli: `**/x` hem `x` hem `a/b/x` ile tutar.
+      body += "(?:[^/]*\\/)*";
+      i += 2;
+    } else if (glob.startsWith("**", i)) {
+      body += ".*";
+      i += 1;
+    } else if (glob[i] === "*") {
+      body += "[^/]*";
+    } else if (glob[i] === "?") {
+      body += "[^/]";
+    } else {
+      body += (glob[i] as string).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${body}$`, "i");
 }
 
 export interface WaiverLoad {
@@ -91,10 +135,23 @@ export function loadWaivers(projectRoot: string, fileName: string = WAIVER_FILE)
     const fingerprint = asString(o.fingerprint);
     const check = asString(o.check);
     const id = asString(o.id);
+    const path = asString(o.path);
     const reason = asString(o.reason);
     const expires = asString(o.expires);
-    if (!fingerprint && !check && !id) {
-      warnings.push(`${fileName} waiver #${i + 1}: fingerprint/check/id yok, atlandı.`);
+    if (!fingerprint && !check && !id && !path) {
+      warnings.push(`${fileName} waiver #${i + 1}: fingerprint/check/id/path yok, atlandı.`);
+      return;
+    }
+    if (path && path.length > MAX_GLOB_LEN) {
+      warnings.push(`${fileName} waiver #${i + 1}: path glob'u ${MAX_GLOB_LEN} karakteri aşıyor, atlandı.`);
+      return;
+    }
+    // Tek başına "**" her şeyi kapsar — bir denetim aracında sessizce her bulguyu yutan waiver,
+    // waiver'ın kendisinden daha tehlikelidir. Başka bir selector'la daraltılmasını şart koş.
+    if (path && /^\*+$/.test(path.replace(/\//g, "")) && !fingerprint && !check && !id) {
+      warnings.push(
+        `${fileName} waiver #${i + 1}: "${path}" tüm bulguları kapsar; fingerprint/check/id ile daraltın. Atlandı.`,
+      );
       return;
     }
     if (!reason) {
@@ -109,7 +166,14 @@ export function loadWaivers(projectRoot: string, fileName: string = WAIVER_FILE)
         `${fileName} waiver #${i + 1}: check "${check}" v0.10'da "${check === "E8" ? "B8" : "B6"}" olarak normalize edildi; waiver'ı güncelleyin (şu hâliyle hiçbir bulguyla eşleşmez).`,
       );
     }
-    waivers.push({ ...(fingerprint && { fingerprint }), ...(check && { check }), ...(id && { id }), reason, ...(expires && { expires }) });
+    waivers.push({
+      ...(fingerprint && { fingerprint }),
+      ...(check && { check }),
+      ...(id && { id }),
+      ...(path && { path }),
+      reason,
+      ...(expires && { expires }),
+    });
   });
 
   return { waivers, fileFound: true, warnings };
@@ -126,7 +190,20 @@ function matches(w: Waiver, f: Finding): boolean {
   if (w.fingerprint && w.fingerprint !== f.fingerprint) return false;
   if (w.check && w.check !== f.check) return false;
   if (w.id && w.id !== f.id) return false;
+  if (w.path && !pathMatches(w.path, f)) return false;
   return true;
+}
+
+/**
+ * `path` selector'ı: bulgunun TÜM kanıt konumları glob'a uymalı.
+ *
+ * Kanıtsız bulgu eşleşmez — "hepsi uydu" boş kümede vakuumla doğru olurdu ve dosya-dışı
+ * bulguları (`npm audit`, `git status`) bir yol glob'unun sessizce yutmasına yol açardı.
+ */
+function pathMatches(glob: string, f: Finding): boolean {
+  if (f.evidence.length === 0) return false;
+  const re = globToRegExp(glob);
+  return f.evidence.every((e) => re.test(e.source));
 }
 
 /**

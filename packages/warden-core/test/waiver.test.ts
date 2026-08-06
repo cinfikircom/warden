@@ -151,3 +151,95 @@ describe("v0.10 göç uyarısı — E3/E8/E10 check kodları B6/B8 oldu", () => 
     });
   });
 });
+
+describe("path selector — yol glob'u ile waiver", () => {
+  const now = "2026-06-25T00:00:00.000Z";
+
+  /** Belirtilen kanıt konumlarını taşıyan test bulgusu. */
+  function fp(check: string, ...sources: string[]): Finding {
+    return makeFinding({
+      id: `${check}-x`, title: "t", severity: "P1", module: "B", check, category: "x", confidence: "high",
+      evidence: sources.map((s) => ({ type: "file" as const, source: s, location: "1" })),
+      impact: "i", recommendation: "r", effort: "S", autoFixable: false,
+    });
+  }
+
+  it("`**` segment sınırını aşar, `*` aşmaz", () => {
+    const derin = fp("B6", "packages/core/src/modules/sast/rules.ts");
+    expect(partitionWaived([derin], [{ path: "packages/**", check: "B6", reason: "r" }], now).waived).toHaveLength(1);
+    // tek `*` yalnızca bir segment: packages/<tek-segment> ile bitmeli
+    expect(partitionWaived([derin], [{ path: "packages/*", check: "B6", reason: "r" }], now).waived).toHaveLength(0);
+  });
+
+  it("`**/` sıfır segmentle de eşleşir", () => {
+    const kok = fp("B6", "rules.ts");
+    const ic = fp("B6", "a/b/rules.ts");
+    const w = [{ path: "**/rules.ts", check: "B6", reason: "r" }];
+    expect(partitionWaived([kok], w, now).waived).toHaveLength(1);
+    expect(partitionWaived([ic], w, now).waived).toHaveLength(1);
+  });
+
+  it("bulgu ANCAK tüm kanıtları glob'a uyuyorsa waive edilir", () => {
+    const tamamenIcerde = fp("B6", "src/legacy/a.ts", "src/legacy/b.ts");
+    const kismen = fp("B6", "src/legacy/a.ts", "src/core/b.ts");
+    const w = [{ path: "src/legacy/**", check: "B6", reason: "r" }];
+    expect(partitionWaived([tamamenIcerde], w, now).waived).toHaveLength(1);
+    expect(partitionWaived([kismen], w, now).waived).toHaveLength(0); // gerçek bulgu yutulmaz
+  });
+
+  it("kanıtsız bulgu path waiver'ıyla eşleşmez", () => {
+    const kanitsiz = makeFinding({
+      id: "D2-x", title: "t", severity: "P2", module: "D", check: "D2", category: "x", confidence: "low",
+      evidence: [], impact: "i", recommendation: "r", effort: "S", autoFixable: false,
+    });
+    expect(partitionWaived([kanitsiz], [{ path: "src/**", reason: "r" }], now).waived).toHaveLength(0);
+  });
+
+  it("selector'lar AND ile birleşir: path tutsa da check tutmazsa waive edilmez", () => {
+    const b6 = fp("B6", "src/legacy/a.ts");
+    expect(partitionWaived([b6], [{ path: "src/legacy/**", check: "B3", reason: "r" }], now).waived).toHaveLength(0);
+  });
+
+  it("regex metakarakterleri literal işlenir (glob bir regex enjeksiyon yüzeyi değil)", () => {
+    const nokta = fp("B6", "src/a.b.ts");
+    // "." glob'da literal nokta demek; regex'teki "herhangi karakter" DEĞİL
+    expect(partitionWaived([nokta], [{ path: "src/a.b.ts", check: "B6", reason: "r" }], now).waived).toHaveLength(1);
+    expect(partitionWaived([nokta], [{ path: "src/aXb.ts", check: "B6", reason: "r" }], now).waived).toHaveLength(0);
+  });
+
+  it("path tek başına geçerli bir selector'dır (fingerprint/check/id şart değil)", () => {
+    withWaiverFile(`waivers:\n  - path: "src/legacy/**"\n    reason: "devralınan"\n`, (root) => {
+      const r = loadWaivers(root);
+      expect(r.waivers).toHaveLength(1);
+      expect(r.warnings).toHaveLength(0);
+    });
+  });
+
+  it("her şeyi kapsayan çıplak glob REDDEDİLİR (sessiz yutma koruması)", () => {
+    withWaiverFile(`waivers:\n  - path: "**"\n    reason: "hepsi"\n`, (root) => {
+      const r = loadWaivers(root);
+      expect(r.waivers).toHaveLength(0);
+      expect(r.warnings.join(" ")).toContain("tüm bulguları kapsar");
+    });
+  });
+
+  it("her şeyi kapsayan glob, başka selector'la daraltılırsa KABUL edilir", () => {
+    withWaiverFile(`waivers:\n  - path: "**"\n    check: "B3"\n    reason: "daraltıldı"\n`, (root) => {
+      expect(loadWaivers(root).waivers).toHaveLength(1);
+    });
+  });
+
+  it("aşırı uzun glob reddedilir", () => {
+    withWaiverFile(`waivers:\n  - path: "${"a/".repeat(150)}"\n    reason: "uzun"\n`, (root) => {
+      const r = loadWaivers(root);
+      expect(r.waivers).toHaveLength(0);
+      expect(r.warnings.join(" ")).toContain("karakteri aşıyor");
+    });
+  });
+
+  it("hiçbir selector yoksa uyarı metni path'i de anar", () => {
+    withWaiverFile(`waivers:\n  - reason: "selector yok"\n`, (root) => {
+      expect(loadWaivers(root).warnings.join(" ")).toContain("path");
+    });
+  });
+});
