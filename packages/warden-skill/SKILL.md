@@ -162,8 +162,9 @@ Tüm kontroller ve durumları: `docs/CHECKS.md`. Modüller:
 - **CLOUD** IaC · **K8S** manifest · **AI** LLM güvenliği
 - **PAY** ödeme güvenliği & güvenilirliği · **ACCESS** erişim kontrolü & kiracı izolasyonu ·
   **AUTH** kimlik & oturum · **API** OWASP API Top 10 · **PRIV** veri gizliliği & denetim izi ·
-  **WEB** CSRF/clickjacking/başlıklar · **FLOW** iş-akışı & veri bütünlüğü · **EMAIL** e-posta
-  güvenliği · **UPLOAD** dosya yükleme güvenliği
+  **WEB** CSRF/clickjacking/başlıklar · **FE** frontend güvenliği (DOM-XSS · CSP · SRI ·
+  postMessage) · **FLOW** iş-akışı & veri bütünlüğü · **EMAIL** e-posta güvenliği ·
+  **UPLOAD** dosya yükleme güvenliği
 
 Her modül yalnız ilgili yüzey (ödeme/mailer/yükleme/IaC/…) tespit edilince koşar; gürültü üretmez.
 

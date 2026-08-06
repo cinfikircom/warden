@@ -77,6 +77,15 @@ function readScripts(ctx: DetectContext): string {
   }
 }
 
+// D5b — tedarik zinciri bütünlüğü sinyalleri (CI dosyaları + package.json scripts).
+const PUBLISH_RE =
+  /docker\/build-push-action|docker\s+push|buildx\s+build[^\n]*--push|npm\s+publish|pnpm\s+publish|yarn\s+publish|helm\s+push|gh\s+release\s+create|softprops\/action-gh-release|goreleaser|mvn[^\n]*deploy|dotnet\s+nuget\s+push|twine\s+upload/i;
+const SIGN_RE =
+  /cosign|sigstore\/|sigstore-|notaryproject|notation\s+sign|gpg\s+--?(?:detach-)?sign|--sign-blob|npm\s+publish[^\n]*--provenance/i;
+const PROVENANCE_RE =
+  /slsa-framework\/slsa-github-generator|actions\/attest-build-provenance|attest-sbom|provenance\s*:\s*true|in-toto/i;
+const SBOM_RE = /anchore\/sbom-action|\bsyft\b|cyclonedx|spdx|trivy[^\n]*\bsbom\b|docker\s+sbom|cdxgen/i;
+
 export function collectComplianceData(ctx: DetectContext): ComplianceData {
   const deps = readPkgDeps(ctx);
   const scripts = readScripts(ctx);
@@ -86,13 +95,24 @@ export function collectComplianceData(ctx: DetectContext): ComplianceData {
   const ciFiles = fileList.filter((p) => /(^|\/)\.github\/workflows\/.+\.ya?ml$|(^|\/)\.gitlab-ci\.yml$|(^|\/)\.circleci\/|(^|\/)azure-pipelines\.yml$|(^|\/)Jenkinsfile$/.test(p));
   const hasCI = ciFiles.length > 0;
   let ciHasTestGate = false;
+  let publishesArtifacts = false;
+  let hasArtifactSigning = false;
+  let hasProvenance = false;
+  let hasSbom = false;
+  // NOT: burada `break` YOK — test kapısı ilk workflow'da bulunsa bile yayın/imza sinyalleri
+  // başka workflow'larda (release.yml) olabilir; hepsi okunmalı. ciFiles tipik olarak <10.
   for (const f of ciFiles) {
     const t = ctx.readFile(f) ?? "";
-    if (/\b(test|vitest|jest|pytest|go test|phpunit|eslint|lint|playwright|cypress)\b/i.test(t)) {
-      ciHasTestGate = true;
-      break;
-    }
+    if (/\b(test|vitest|jest|pytest|go test|phpunit|eslint|lint|playwright|cypress)\b/i.test(t)) ciHasTestGate = true;
+    if (PUBLISH_RE.test(t)) publishesArtifacts = true;
+    if (SIGN_RE.test(t)) hasArtifactSigning = true;
+    if (PROVENANCE_RE.test(t)) hasProvenance = true;
+    if (SBOM_RE.test(t)) hasSbom = true;
   }
+  // package.json script'leri de yayın/imza sinyali taşıyabilir.
+  if (PUBLISH_RE.test(scripts)) publishesArtifacts = true;
+  if (SIGN_RE.test(scripts)) hasArtifactSigning = true;
+  if (SBOM_RE.test(scripts)) hasSbom = true;
 
   // Prisma şema + kişisel veri bağlamı
   const schemaPath = ctx.exists("prisma/schema.prisma")
@@ -139,7 +159,11 @@ export function collectComplianceData(ctx: DetectContext): ComplianceData {
   const hasBackup = fileList.some((p) => BACKUP_RE.test(p)) || BACKUP_RE.test(scripts);
   const hasRestore = fileList.some((p) => RESTORE_RE.test(p)) || RESTORE_RE.test(scripts);
 
-  return { deps, hasCI, ciFiles, ciHasTestGate, prismaSchema: combinedSchema, hasPersonalData: Boolean(hasPersonalData), cardHits, hasBackup, hasRestore };
+  return {
+    deps, hasCI, ciFiles, ciHasTestGate, prismaSchema: combinedSchema,
+    hasPersonalData: Boolean(hasPersonalData), cardHits, hasBackup, hasRestore,
+    publishesArtifacts, hasArtifactSigning, hasProvenance, hasSbom,
+  };
 }
 
 /**

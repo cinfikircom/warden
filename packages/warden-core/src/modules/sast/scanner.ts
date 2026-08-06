@@ -36,21 +36,39 @@ export interface SourceRule {
   readonly maxPerFile?: number;
 }
 
-const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|astro|py|go|php|rb|java|cs)$/i;
-const SKIP_PATH =
+/** Varsayılan kod dosyası deseni. Modüller kendi `include`'unu geçerek genişletebilir (ör. FE: .html). */
+export const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|astro|py|go|php|rb|java|cs)$/i;
+export const SKIP_PATH =
   /(^|\/)(node_modules|dist|build|\.next|coverage|warden-report|vendor)\/|\.min\.js$|\.(test|spec)\.[a-z]+$|(^|\/)(test|tests|__tests__|fixtures)\//i;
 
 export interface ScanSourceOptions {
   readonly maxFiles?: number;
   readonly maxBytesPerFile?: number;
+  /**
+   * Taranacak dosya deseni. Verilmezse `CODE_FILE`.
+   * `g` bayrağı KULLANMA — `test()` stateful olur ve dosyaları rastgele atlar.
+   */
+  readonly include?: RegExp;
+  /** Atlama deseni. Verilmezse `SKIP_PATH` (ek değil, YERİNE geçer). */
+  readonly skip?: RegExp;
+  /**
+   * Dizin derinliği sınırı. Verilmezse DetectContext varsayılanı (4).
+   * Derin ağaçlarda (monorepo: apps/web/src/components/ui/X.tsx = 5) yükseltmek gerekir.
+   */
+  readonly maxDepth?: number;
 }
 
 /** Kaynak ağacını tarar; kural setini uygular; kanıtlı bulgular döndürür. */
 export function scanSource(ctx: DetectContext, rules: readonly SourceRule[], opts: ScanSourceOptions = {}): Finding[] {
   const maxFiles = opts.maxFiles ?? 5000;
   const maxBytes = opts.maxBytesPerFile ?? 1_000_000;
+  const include = opts.include ?? CODE_FILE;
+  const skip = opts.skip ?? SKIP_PATH;
 
-  const files = ctx.find((p) => CODE_FILE.test(p) && !SKIP_PATH.test(p), { limit: maxFiles });
+  const files = ctx.find((p) => include.test(p) && !skip.test(p), {
+    limit: maxFiles,
+    ...(opts.maxDepth !== undefined ? { maxDepth: opts.maxDepth } : {}),
+  });
   const findings: Finding[] = [];
   const seen = new Set<string>();
 

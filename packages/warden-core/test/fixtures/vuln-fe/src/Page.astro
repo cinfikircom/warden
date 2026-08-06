@@ -1,0 +1,8 @@
+---
+// Bilerek açıklı fixture — yalnızca test amaçlı. FE-3: Astro set:html sink.
+const { body } = Astro.props;
+---
+
+<article>
+  <div set:html={body} />
+</article>

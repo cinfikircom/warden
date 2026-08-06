@@ -1,10 +1,51 @@
 import type { SourceRule } from "./scanner.ts";
-import { looksHighEntropySecret } from "../../util/entropy.ts";
+import { looksHighEntropySecret, shannonEntropy, extractStringLiterals } from "../../util/entropy.ts";
 
 /**
- * SAST kural seti (Faz 2). Modül B + Frontend (FE) statik kuralları; her kural OWASP/ASVS'e eşli
- * (Modül E mapping). Desenler bilinçli olarak düşük false-positive; şüpheli olanlar confidence=medium/low.
+ * SAST kural seti (Modül B). Her kural OWASP Top 10 / ASVS'e `references` üzerinden eşlidir;
+ * uyum tablosunu bu referanslardan `risk/owasp.ts` üretir. Desenler bilinçli olarak düşük
+ * false-positive; şüpheli olanlar confidence=medium/low.
+ * (Frontend kuralları v0.10'da ayrıldı → modules/fe/rules.ts.)
  */
+
+/** Zayıf/sözlük JWT secret sözcükleri (kaba kuvvetle dakikalar içinde kırılır). */
+const WEAK_SECRET_WORDS =
+  /^(?:secret|mysecret|supersecret|jwt|jwtsecret|token|key|secretkey|changeme|changeme123|password|passwd|pass|admin|test|dev|demo|local|foo|bar|abc\d*|12345\d*|qwerty)[\w-]{0,8}$/i;
+
+/**
+ * Bir string literal, JWT imza secret'ı olarak zayıf mı?
+ * Env/interpolasyon/algoritma adları ve JWT token örnekleri elenir; kalanlar sözlük eşleşmesi
+ * VEYA "kısa + düşük entropi" ölçütüyle değerlendirilir.
+ */
+function isWeakSecretLiteral(lit: string): boolean {
+  if (!lit || /^\$\{|^process\.env|^HS\d{3}$|^RS\d{3}$|^ES\d{3}$|^none$/i.test(lit)) return false;
+  if (lit.split(".").length === 3) return false; // "a.b.c" — token örneği, secret değil
+  if (WEAK_SECRET_WORDS.test(lit)) return true;
+  return lit.length < 32 && shannonEntropy(lit) < 3.5;
+}
+
+/**
+ * SECRET ARGÜMANI konumundaki literaller: `sign(payload, "SECRET", opts)` ya da
+ * `verify(t, process.env.X || "dev")`. Yalnızca `,` / `||` / `??` sonrası GELEN literaller
+ * alınır — `{ expiresIn: "15m" }` gibi opsiyon değerleri (`:` sonrası) böylece elenir.
+ * Bu ayrım kritik: tüm literalleri tarasaydık her kısa opsiyon değeri false-positive üretirdi.
+ */
+function secretArgLiterals(line: string): string[] {
+  const out: string[] = [];
+  const re = /(?:,|\|\||\?\?)\s*(['"`])([^'"`\n]{1,64})\1/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) if (m[2]) out.push(m[2]);
+  return out;
+}
+
+/** Yapılandırma ataması konumundaki literaller: `JWT_SECRET = "..."` / `jwtSecret: "..."`. */
+function configSecretLiterals(line: string): string[] {
+  const out: string[] = [];
+  const re = /[:=]\s*(['"`])([^'"`\n]{1,64})\1/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) if (m[2]) out.push(m[2]);
+  return out;
+}
 export const SAST_RULES: readonly SourceRule[] = [
   // ---- B1 Secret taraması -------------------------------------------------
   {
@@ -75,15 +116,8 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021", "ASVS 6.3.1"], effort: "S",
   },
 
-  // ---- B4 / FE Auth tasarımı ---------------------------------------------
-  {
-    id: "FE-jwt-localstorage", check: "B4", module: "FE", title: "JWT/token localStorage/sessionStorage'da (XSS'e açık)",
-    severity: "P1", category: "Auth Design", confidence: "high",
-    pattern: /(localStorage|sessionStorage)\.setItem\(\s*['"][^'"]*(token|jwt|auth|access|refresh)/i,
-    impact: "XSS ile token çalınabilir; web storage HttpOnly korumasından yoksun.",
-    recommendation: "Token'ı httpOnly + Secure + SameSite cookie'de tut; storage'dan çıkar.",
-    references: ["OWASP A07:2021", "ASVS 3.4", "OWASP API2"], effort: "M",
-  },
+  // ---- B4 Auth tasarımı ---------------------------------------------------
+  // NOT: JWT-in-localStorage kuralı v0.10'da Modül FE'ye taşındı (modules/fe/rules.ts, FE-1).
   {
     id: "B4-jwt-long-ttl", check: "B4", module: "B", title: "Uzun JWT geçerlilik süresi (TTL)",
     severity: "P2", category: "Auth Design", confidence: "medium",
@@ -290,25 +324,8 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A03:2021"], effort: "M",
   },
 
-  // ---- FE Frontend güvenlik ----------------------------------------------
-  {
-    id: "FE-dangerous-html", check: "FE-3", module: "FE", title: "dangerouslySetInnerHTML (XSS sink)",
-    severity: "P1", category: "Frontend XSS", confidence: "medium",
-    pattern: /dangerouslySetInnerHTML/,
-    pathInclude: /\.(jsx|tsx)$/i,
-    impact: "Sanitize edilmemiş HTML enjekte ediliyorsa DOM-XSS.",
-    recommendation: "DOMPurify ile sanitize et veya bu kullanımdan kaçın.",
-    references: ["OWASP A03:2021"], effort: "S",
-  },
-  {
-    id: "FE-vue-vhtml", check: "FE-3", module: "FE", title: "Vue v-html (XSS sink)",
-    severity: "P1", category: "Frontend XSS", confidence: "medium",
-    pattern: /\bv-html\s*=/,
-    pathInclude: /\.(vue|html)$/i,
-    impact: "v-html sanitize edilmemiş HTML render eder; DOM-XSS.",
-    recommendation: "DOMPurify ile sanitize et veya metin binding kullan.",
-    references: ["OWASP A03:2021"], effort: "S",
-  },
+  // NOT: Frontend XSS sink kuralları (dangerouslySetInnerHTML, v-html, ...) v0.10'da
+  // Modül FE'ye taşındı — bkz. modules/fe/rules.ts (FE-3).
 
   // ===================================================================================
   // KAPSAM GENİŞLETME (2026): B1 ek token'lar · entropi · SSRF · SSTI · path traversal ·
@@ -340,7 +357,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- SSRF (OWASP A10) --------------------------------------------------
   {
-    id: "B6-ssrf-node", check: "E10", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
+    id: "B6-ssrf-node", check: "B6", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
     severity: "P1", category: "SSRF", confidence: "low",
     pattern: /\b(axios|fetch|got|superagent|http|https)\s*(\.\w+)?\s*\(\s*[`'"]?[^)]*(req\.(params|query|body)|ctx\.(request|query|params))/i,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
@@ -349,7 +366,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A10:2021", "ASVS 12.6"], effort: "M",
   },
   {
-    id: "B6-ssrf-py", check: "E10", module: "B", title: "SSRF adayı: requests/urlopen hedefi girdiden",
+    id: "B6-ssrf-py", check: "B6", module: "B", title: "SSRF adayı: requests/urlopen hedefi girdiden",
     severity: "P1", category: "SSRF", confidence: "low",
     pattern: /\b(requests\.(get|post|put|delete|head)|urllib\.request\.urlopen|urlopen|httpx\.(get|post))\s*\(\s*[^)]*request\.(GET|POST|data|args)/,
     pathInclude: /\.py$/,
@@ -400,7 +417,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- Güvensiz deserialization (OWASP A08) ------------------------------
   {
-    id: "B8-deserialize-node", check: "E8", module: "B", title: "Güvensiz deserialization (node-serialize/vm)",
+    id: "B8-deserialize-node", check: "B8", module: "B", title: "Güvensiz deserialization (node-serialize/vm)",
     severity: "P0", category: "Insecure Deserialization", confidence: "medium",
     pattern: /\b(unserialize\s*\(|node-serialize|vm\.runInNewContext|vm\.runInThisContext)\b/,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
@@ -409,7 +426,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A08:2021"], effort: "M",
   },
   {
-    id: "B8-pickle-py", check: "E8", module: "B", title: "Güvensiz deserialization (pickle/yaml.load/marshal)",
+    id: "B8-pickle-py", check: "B8", module: "B", title: "Güvensiz deserialization (pickle/yaml.load/marshal)",
     severity: "P0", category: "Insecure Deserialization", confidence: "medium",
     pattern: /\b(pickle\.loads?|cPickle\.loads?|marshal\.loads?|yaml\.load)\s*\(/,
     validate: (line) => !/SafeLoader|safe_load|Loader\s*=\s*yaml\.Safe/.test(line),
@@ -419,7 +436,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A08:2021"], effort: "M",
   },
   {
-    id: "B8-unserialize-php", check: "E8", module: "B", title: "PHP unserialize() (nesne enjeksiyonu)",
+    id: "B8-unserialize-php", check: "B8", module: "B", title: "PHP unserialize() (nesne enjeksiyonu)",
     severity: "P1", category: "Insecure Deserialization", confidence: "low",
     pattern: /\bunserialize\s*\(\s*\$/,
     pathInclude: /\.php$/,
@@ -428,7 +445,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A08:2021"], effort: "M",
   },
   {
-    id: "B8-dotnet-deserialize", check: "E8", module: "B", title: ".NET güvensiz deserialization (BinaryFormatter/TypeNameHandling)",
+    id: "B8-dotnet-deserialize", check: "B8", module: "B", title: ".NET güvensiz deserialization (BinaryFormatter/TypeNameHandling)",
     severity: "P0", category: "Insecure Deserialization", confidence: "medium",
     pattern: /\b(BinaryFormatter|LosFormatter|NetDataContractSerializer|TypeNameHandling\s*=\s*TypeNameHandling\.(All|Auto|Objects))\b/,
     pathInclude: /\.cs$/,
@@ -439,7 +456,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- XXE (XML External Entity) -----------------------------------------
   {
-    id: "B6-xxe-py", check: "E3", module: "B", title: "XXE adayı: XML parser dış-varlık çözümlü",
+    id: "B6-xxe-py", check: "B6", module: "B", title: "XXE adayı: XML parser dış-varlık çözümlü",
     severity: "P1", category: "XXE", confidence: "low",
     pattern: /(etree\.parse|XMLParser\s*\([^)]*resolve_entities\s*=\s*True|lxml.*no_network\s*=\s*False)/,
     pathInclude: /\.py$/,
@@ -469,22 +486,95 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021", "OWASP A07:2021", "ASVS 3.5"], effort: "S",
   },
 
-  // ---- Frontend: CSP zayıf · source map --------------------------------
+  // NOT: Zayıf CSP (FE-2) ve üretim source map (FE-4) kuralları v0.10'da Modül FE'ye taşındı.
+  // FE-2 artık satır-bazlı değil PENCERE analiziyle çalışıyor (modules/fe/index.ts) — eski
+  // `[\s\S]{0,120}` deseni satır-bazlı tarayıcıyla yapısal olarak uyumsuzdu ve çok satırlı
+  // helmet/Next.js yazımını sessizce kaçırıyordu.
+
+  // ===================================================================================
+  // v0.10 — OWASP kapsam boşlukları: NoSQL/LDAP injection (A03), sabit IV & zayıf JWT
+  // secret (A02/A07). Bunlar CHECKS.md'de vaat edilmiş ama hiç uygulanmamıştı.
+  // ===================================================================================
+
+  // ---- B6 NoSQL injection (A03) ------------------------------------------
   {
-    id: "FE-csp-unsafe", check: "FE-2", module: "FE", title: "CSP 'unsafe-inline'/'unsafe-eval' (XSS koruması zayıf)",
-    severity: "P2", category: "Security Misconfiguration", confidence: "medium",
-    pattern: /Content-Security-Policy[\s\S]{0,120}?(unsafe-inline|unsafe-eval)/i,
-    impact: "unsafe-inline/eval CSP'nin XSS korumasını büyük ölçüde etkisizleştirir.",
-    recommendation: "nonce/hash tabanlı CSP kullan; inline script/style'ı kaldır.",
-    references: ["OWASP A05:2021"], effort: "M",
+    id: "B6-nosql-where", check: "B6", module: "B", title: "NoSQL injection: $where/$function JavaScript'i dinamik girdiyle",
+    severity: "P0", category: "Injection", confidence: "medium",
+    pattern: /\$(?:where|function|accumulator)\s*[:=]\s*(?:[`'"][^\n]{0,120}?(?:\$\{|['"]\s*\+|\+\s*['"`])|[A-Za-z_$][\w$]*\s*\+|(?:req|ctx|request)\.)/i,
+    impact: "$where MongoDB sunucusunda JavaScript çalıştırır; istemci girdisi buraya girerse tam koleksiyon okuma ve veri sızıntısı mümkün.",
+    recommendation: "$where/$function kullanma; $expr + tipli operatörlerle yaz. Zorunluysa girdiyi allow-list ile doğrula, asla string'e gömme.",
+    references: ["OWASP A03:2021", "ASVS 5.3.4", "CWE-943"], effort: "M",
   },
   {
-    id: "FE-source-map-prod", check: "FE-4", module: "FE", title: "Üretimde source map açık (kaynak sızıntısı)",
-    severity: "P3", category: "Information Leak", confidence: "low",
-    pattern: /(productionSourceMap\s*:\s*true|sourcemap\s*:\s*true|devtool\s*:\s*['"](?:source-map|eval-source-map)['"])/,
-    pathInclude: /(vite|webpack|vue|next|rollup|nuxt)\.config\.[jt]s$|\.config\.[jt]s$/i,
-    impact: "Yayınlanan source map orijinal kaynağı/iç mantığı ifşa eder.",
-    recommendation: "Üretim derlemesinde source map'i kapat veya yalnızca gizli hata-izleme yüklemesine gönder.",
-    references: ["OWASP A05:2021"], effort: "S",
+    id: "B6-nosql-operator", check: "B6", module: "B", title: "NoSQL operatör enjeksiyonu adayı: istemci değeri doğrudan sorgu filtresinde",
+    severity: "P1", category: "Injection", confidence: "low",
+    pattern: /\.(?:find|findOne|findOneAndUpdate|findOneAndDelete|updateOne|updateMany|deleteOne|deleteMany|countDocuments)\s*\(\s*\{[^}\n]*:\s*(?:req|ctx)\.(?:body|query|params)\.[A-Za-z_$][\w$]*\s*[,}]/,
+    // Cast/şema doğrulaması varsa operatör enjeksiyonu kapalıdır → FP'yi bu eler.
+    validate: (line) => !/\bString\(|\.toString\(|\bNumber\(|parseInt\(|parseFloat\(|ObjectId\(|\bz\.|Joi\.|yup\.|\.parse\(/.test(line),
+    impact: 'Gövde/query değeri nesne olabilir ({"$ne":null}); doğrudan filtreye konursa kimlik doğrulama bypass\'ı veya kayıt sızıntısı olur.',
+    recommendation: "Değeri String()/Number() ile cast et veya Zod/Joi şemasıyla doğrula; Mongoose'ta sanitizeFilter/strictQuery aç, express-mongo-sanitize kullan.",
+    references: ["OWASP A03:2021", "ASVS 5.3.4", "CWE-943"], effort: "M",
+  },
+
+  // ---- B6 LDAP injection (A03) -------------------------------------------
+  {
+    id: "B6-ldap-injection", check: "B6", module: "B", title: "LDAP injection: arama filtresi istemci girdisiyle birleştiriliyor",
+    severity: "P0", category: "Injection", confidence: "medium",
+    // İKİ SİNYAL aynı satırda: LDAP bağlamı + (attr=...) filtresinde birleştirme/interpolasyon.
+    pattern: /(?:ldap|\bsearch\b|\bfilter\b|\bbind\b|DirectorySearcher|InitialDirContext)[^\n]{0,120}?\(\s*(?:uid|cn|sn|mail|sAMAccountName|userPrincipalName|objectClass|memberOf|distinguishedName)\s*=[^)\n]{0,60}(?:\$\{|['"]\s*\+|\+\s*['"`]|%s|\{\})/i,
+    impact: "LDAP filtresine kaçışsız girdi girerse saldırgan `*)(uid=*` ile kimlik doğrulamayı atlar veya tüm dizini okur.",
+    recommendation: "Parametreli/escape'li API kullan (ldapjs filter nesnesi, ldap.escape, .NET LdapFilterEncode, python-ldap3 escape_filter_chars); girdiyi allow-list ile doğrula.",
+    references: ["OWASP A03:2021", "ASVS 5.3.7", "CWE-90"], effort: "M",
+  },
+
+  // ---- B3 Sabit/statik IV (A02) ------------------------------------------
+  {
+    id: "B3-static-iv", check: "B3", module: "B", title: "createCipheriv sabit/sıfır IV ile (deterministik şifreleme)",
+    severity: "P1", category: "Cryptographic Failure", confidence: "high",
+    pattern: /createCipheriv\s*\([^)\n]*,\s*(?:Buffer\.from\s*\(\s*['"]|Buffer\.alloc\s*\(\s*\d+\s*\)|['"][^'"\n]{8,}['"]|new\s+Uint8Array\s*\(\s*\[)/i,
+    validate: (line) => !/randomBytes|randomFillSync|getRandomValues|randomUUID/.test(line),
+    impact: "Sabit IV aynı düz metni her seferinde aynı şifreli metne çevirir; CBC'de blok deseni sızar, GCM/CTR'de nonce tekrarı anahtar akışını ifşa eder → düz metin kurtarılabilir.",
+    recommendation: "Her şifreleme için crypto.randomBytes(12|16) ile IV/nonce üret; IV'yi şifreli metnin başına ekleyip birlikte sakla (gizli değil, TEKRARSIZ olmalı).",
+    references: ["OWASP A02:2021", "ASVS 6.2.3", "CWE-329"], effort: "S",
+  },
+  {
+    id: "B3-static-iv-const", check: "B3", module: "B", title: "Sabit IV/nonce tanımı (modül düzeyinde değişmez başlangıç vektörü)",
+    severity: "P1", category: "Cryptographic Failure", confidence: "medium",
+    pattern: /\b(?:const|let|var|static\s+readonly|private\s+static)\s+[\w$]*(?:iv|IV|Iv|nonce|Nonce)[\w$]*\s*(?::\s*[\w<>[\]]+)?\s*=\s*(?:Buffer\.from\s*\(\s*['"]|Buffer\.alloc\s*\(\s*\d+\s*\)|['"][0-9a-fA-F]{16,}['"]|new\s+(?:Uint8Array|byte\[\])\s*[([]\s*[\d{])/,
+    validate: (line) => !/randomBytes|randomFillSync|getRandomValues/.test(line),
+    impact: "IV sabit bir sabitten geliyorsa tüm şifreleme çağrıları aynı IV'yi paylaşır — sabit IV ile aynı sonuç.",
+    recommendation: "IV'yi sabit tanımlama; çağrı başına crypto.randomBytes ile üret.",
+    references: ["OWASP A02:2021", "ASVS 6.2.3", "CWE-329"], effort: "S",
+  },
+  {
+    id: "B3-static-iv-py", check: "B3", module: "B", title: "Sabit IV (PyCryptodome AES.new)",
+    severity: "P1", category: "Cryptographic Failure", confidence: "high",
+    pattern: /AES\.new\s*\([^)\n]*,\s*AES\.MODE_(?:CBC|CFB|OFB|CTR|GCM|OCB)\s*,\s*(?:b?['"][^'"\n]+['"]|bytes\s*\(\s*\d+\s*\)|IV\b|iv\b)/,
+    validate: (line) => !/get_random_bytes|os\.urandom|secrets\./.test(line),
+    impact: "Sabit IV ile AES deterministik olur; CTR/GCM'de nonce tekrarı anahtarı pratikte kırar.",
+    recommendation: "get_random_bytes(16) / os.urandom(12) ile IV üret; şifreli metinle birlikte sakla.",
+    references: ["OWASP A02:2021", "ASVS 6.2.3", "CWE-329"], effort: "S",
+  },
+
+  // ---- B4 Zayıf JWT secret (A02/A07) -------------------------------------
+  {
+    id: "B4-weak-jwt-secret", check: "B4", module: "B", title: "Zayıf/tahmin edilebilir JWT imza secret'ı",
+    severity: "P0", category: "Auth Design", confidence: "medium",
+    pattern: /\b(?:sign|verify|signAsync|verifyAsync)\s*\([^\n]{0,160}['"`]/,
+    // İki koşul birden: satırda JWT bağlamı VE secret argümanı konumunda zayıf bir literal.
+    validate: (line) =>
+      /\b(?:jwt|jsonwebtoken|jose|jwtVerify|SignJWT)\b/i.test(line) && secretArgLiterals(line).some(isWeakSecretLiteral),
+    impact: "Zayıf HMAC secret'ı çevrimdışı kaba kuvvetle (hashcat -m 16500) dakikalar içinde kırılır; saldırgan istediği kullanıcı için geçerli token üretir → tam kimlik doğrulama bypass'ı.",
+    recommendation: "En az 32 bayt rastgele secret kullan (crypto.randomBytes(32).toString('base64')); secret manager'dan oku, koda gömme; mümkünse RS256/ES256'ya geç ve rotasyon planla.",
+    references: ["OWASP A02:2021", "OWASP A07:2021", "ASVS 3.5", "CWE-321", "CWE-326"], effort: "M",
+  },
+  {
+    id: "B4-weak-jwt-secret-config", check: "B4", module: "B", title: "Yapılandırmada zayıf JWT/token secret'ı",
+    severity: "P1", category: "Auth Design", confidence: "medium",
+    pattern: /\b(?:jwt[_-]?secret|jwtSecret|secretOrKey|secretOrPrivateKey|token[_-]?secret|access[_-]?token[_-]?secret|refresh[_-]?token[_-]?secret|app[_-]?secret)\b\s*[:=]\s*['"`]/i,
+    validate: (line) => configSecretLiterals(line).some(isWeakSecretLiteral),
+    impact: "Yapılandırmadaki zayıf secret tüm ortamlarda aynı olur; sızarsa veya kırılırsa saldırgan geçerli token forge eder.",
+    recommendation: "Secret'ı env/secret manager'dan oku; ≥32 bayt rastgele üret; ortam başına farklı olsun.",
+    references: ["OWASP A07:2021", "ASVS 3.5", "CWE-321"], effort: "S",
   },
 ];

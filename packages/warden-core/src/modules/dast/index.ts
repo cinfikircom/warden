@@ -2,7 +2,7 @@ import type { WardenModule, ScanContext, ModuleRunResult } from "../../model/mod
 import type { Finding } from "../../model/finding.ts";
 import { GuardedHttpClient } from "./client.ts";
 import type { FetchLike } from "./client.ts";
-import { EXPOSED_PATHS, analyzeExposedFile } from "./exposed.ts";
+import { EXPOSED_PATHS, analyzeExposedFile, LISTING_PATHS, analyzeDirectoryListing } from "./exposed.ts";
 import { analyzeSecurityHeaders, analyzeCookies } from "./headers.ts";
 import { collectTls, analyzeTls } from "./tls.ts";
 import { ADMIN_PATHS, analyzeAdminExposure, analyzeRateLimit } from "./active-checks.ts";
@@ -62,6 +62,15 @@ export function makeDastModule(fetchImpl?: FetchLike): WardenModule {
           const res = await client.get(base + def.path);
           if (!res) continue;
           const f = analyzeExposedFile(def, res);
+          if (f) findings.push(f);
+        }
+
+        // C1b — dizin listeleme (autoindex). GuardedHttpClient tavanı dolmuşsa get() null
+        // döner ve döngü zararsızca boşa gider (hedef başına en çok +6 GET).
+        for (const p of LISTING_PATHS) {
+          const res = await client.get(base + p);
+          if (!res) continue;
+          const f = analyzeDirectoryListing(p, res);
           if (f) findings.push(f);
         }
 

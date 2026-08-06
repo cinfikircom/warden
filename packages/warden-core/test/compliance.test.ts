@@ -11,6 +11,7 @@ const FIXTURE = fileURLToPath(new URL("./fixtures/vuln-prisma-docker", import.me
 const EMPTY: ComplianceData = {
   deps: {}, hasCI: false, ciFiles: [], ciHasTestGate: false,
   prismaSchema: null, hasPersonalData: false, cardHits: [], hasBackup: false, hasRestore: false,
+  publishesArtifacts: false, hasArtifactSigning: false, hasProvenance: false, hasSbom: false,
 };
 
 describe("Modül D — saf analiz", () => {
@@ -71,5 +72,35 @@ describe("Modül D entegrasyon (fixture)", () => {
     // checklist skoru hesaplanabilir olmalı
     const pci = result.checklists.find((c) => c.standard === "PCI-DSS 4.0")!;
     expect(checklistScore(pci).failed).toBeGreaterThan(0);
+  });
+});
+
+describe("D5b — imzasız artifact (tedarik zinciri bütünlüğü, OWASP A08)", () => {
+  const ids = (d: ComplianceData): string[] => analyzeCompliance(d).findings.map((f) => f.id);
+
+  it("yayın var + imza/provenance yok → D5-unsigned-artifact (P2)", () => {
+    const data = { ...EMPTY, hasCI: true, ciFiles: [".github/workflows/release.yml"], publishesArtifacts: true };
+    const f = analyzeCompliance(data).findings.find((x) => x.id === "D5-unsigned-artifact");
+    expect(f?.severity).toBe("P2");
+    expect(f?.references).toContain("OWASP A08:2021");
+  });
+
+  it("cosign/sigstore varsa üretilmez", () => {
+    expect(ids({ ...EMPTY, hasCI: true, publishesArtifacts: true, hasArtifactSigning: true })).not.toContain("D5-unsigned-artifact");
+  });
+
+  it("SLSA provenance varsa üretilmez", () => {
+    expect(ids({ ...EMPTY, hasCI: true, publishesArtifacts: true, hasProvenance: true })).not.toContain("D5-unsigned-artifact");
+  });
+
+  it("FP muhafızı: hiç artifact yayınlamayan proje (kütüphane/iç paket) → üretilmez", () => {
+    expect(ids({ ...EMPTY, hasCI: true, ciHasTestGate: true, publishesArtifacts: false })).not.toContain("D5-unsigned-artifact");
+  });
+});
+
+describe("OWASP A09 eşleştirmesi", () => {
+  it("D2-no-error-tracking artık OWASP A09 referansı taşır (loglama/izleme eksikliği)", () => {
+    const d2 = analyzeCompliance(EMPTY).findings.find((f) => f.id === "D2-no-error-tracking");
+    expect(d2?.references).toContain("OWASP A09:2021");
   });
 });

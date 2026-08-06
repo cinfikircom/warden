@@ -50,12 +50,7 @@ describe("Kapsam-genişletme kuralları — yeni açık sınıflarını yakalar"
   it("Yüksek-entropili secret", () => {
     expect(covIds.has("B1-high-entropy-secret")).toBe(true);
   });
-  it("CSP unsafe-inline", () => {
-    expect(covIds.has("FE-csp-unsafe")).toBe(true);
-  });
-  it("Üretimde source map açık", () => {
-    expect(covIds.has("FE-source-map-prod")).toBe(true);
-  });
+  // NOT: FE-2 (CSP) ve FE-4 (source map) v0.10'da Modül FE'ye taşındı — bkz. test/fe.test.ts.
   it("secret kanıtı maskeli (Stripe anahtarı tam sızmaz)", () => {
     const f = cov.find((x) => x.id.startsWith("B1-provider-token"));
     expect(f?.evidence[0]?.excerpt ?? "").not.toContain("sk_live_4eC39HqLyjWDarjtT1zdp7dcAbCdEf00");

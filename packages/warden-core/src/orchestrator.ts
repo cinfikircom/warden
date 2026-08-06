@@ -12,6 +12,7 @@ import { enrichReachability, buildImportGraph } from "./risk/reachability.ts";
 import { loadWaivers, partitionWaived } from "./risk/waiver.ts";
 import type { AppliedWaiver } from "./risk/waiver.ts";
 import { buildAsvsChecklist } from "./risk/asvs.ts";
+import { buildOwaspChecklist } from "./risk/owasp.ts";
 import { buildCisChecklist, buildIsoChecklist } from "./risk/standards.ts";
 import type { ScanContext, WardenModule } from "./model/module.ts";
 import type { Finding, ModuleId } from "./model/finding.ts";
@@ -20,7 +21,9 @@ import { detectStack, defaultDetectors } from "./detect/registry.ts";
 import type { StackDetector } from "./detect/types.ts";
 import { defaultModules } from "./registry.ts";
 
-export const WARDEN_VERSION = "0.9.0";
+// 0.10.0 — Modül FE ayrıldı, Modül E boyut olmaktan çıkıp OWASP uyum checklist'ine dönüştü,
+// E3/E8/E10 check kodları B6/B8'e normalize edildi (fingerprint/waiver etkisi için CHECKS.md).
+export const WARDEN_VERSION = "0.10.0";
 
 /** Önceki findings.json'ı PreviousRun'a çevirir. Yoksa/bozuksa null (ilk çalışma gibi davranır). */
 function loadPreviousRun(findingsJsonPath: string): PreviousRun | null {
@@ -158,7 +161,8 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   }
   if (waived.length > 0) audit.info(`Toplam ${waived.length} bulgu .warden-ignore.yml ile bastırıldı.`);
 
-  const extraChecklists = [buildAsvsChecklist(active), buildCisChecklist(active), buildIsoChecklist(active)];
+  // OWASP Top 10 başa: raporun "Uyum Özeti" tablosunda en üstte görünmeli.
+  const extraChecklists = [buildOwaspChecklist(active), buildAsvsChecklist(active), buildCisChecklist(active), buildIsoChecklist(active)];
 
   // 5) Rapor üret.
   writeReport(active, {

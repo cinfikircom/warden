@@ -101,6 +101,14 @@ export function loadWaivers(projectRoot: string, fileName: string = WAIVER_FILE)
       warnings.push(`${fileName} waiver #${i + 1}: reason zorunlu, atlandı.`);
       return;
     }
+    // v0.10 göç uyarısı: E3/E8/E10 check kodları B6/B8'e normalize edildi. `check` bir waiver
+    // seçicisi olduğu için eski kodlu waiver'lar sessizce eşleşmez olurdu — sessiz kalmıyoruz.
+    // (Bir sürüm sonra kaldırılacak.)
+    if (check && /^E(3|8|10)$/.test(check)) {
+      warnings.push(
+        `${fileName} waiver #${i + 1}: check "${check}" v0.10'da "${check === "E8" ? "B8" : "B6"}" olarak normalize edildi; waiver'ı güncelleyin (şu hâliyle hiçbir bulguyla eşleşmez).`,
+      );
+    }
     waivers.push({ ...(fingerprint && { fingerprint }), ...(check && { check }), ...(id && { id }), reason, ...(expires && { expires }) });
   });
 

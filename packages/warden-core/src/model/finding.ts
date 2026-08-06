@@ -9,7 +9,10 @@ export const MODULES = [
   "B", // Statik Uygulama Güvenliği / SAST (pasif)
   "C", // Dinamik / DAST & Pentest (AKTİF — yetki kapılı)
   "D", // Uyum & Operasyonel Olgunluk
-  "E", // OWASP Top 10 / ASVS eşleştirme (pasif)
+  // NOT: "E" (OWASP Top 10) v0.10'da BİLEREK KALDIRILDI. Hiçbir modül `module: "E"` emit
+  // etmiyordu → skor tablosunda kalıcı, yanıltıcı bir "n/d" satırı üretiyordu. OWASP Top 10
+  // bir taksonomidir, bir tarama boyutu değil: artık bir UYUM CHECKLIST'i olarak mevcut
+  // bulgulardan türetiliyor (risk/owasp.ts → compliance-report.md).
   "CLOUD", // AWS / Azure / GCP / Cloudflare
   "K8S", // Kubernetes
   "API", // OWASP API Top 10

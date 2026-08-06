@@ -121,7 +121,7 @@ export function analyzePriv(data: PrivData): Finding[] {
       evidence: [{ type: "config", source: anchor, excerpt: "PII + web/API var; kim-neye-erişti/değiştirdi denetim izi (audit log) sinyali yok" }],
       impact: "Denetim izi olmadan yetkisiz erişim/değişiklik tespit edilemez, ihlal sonrası kapsam belirlenemez — CRM/ERP uyum denetimlerinde zorunlu.",
       recommendation: "Hassas kayıt okuma/yazma/silme işlemlerini değişmez bir audit log'a yaz (aktör, zaman, kayıt, önce/sonra); log'ları koru ve düzenli gözden geçir.",
-      effort: "M", autoFixable: false, references: ["KVKK m.12", "GDPR Art.30", "ISO 27001 A.12.4", "SOC 2 CC7"],
+      effort: "M", autoFixable: false, references: ["KVKK m.12", "GDPR Art.30", "ISO 27001 A.12.4", "SOC 2 CC7", "OWASP A09:2021", "CWE-778"],
     }));
   }
 

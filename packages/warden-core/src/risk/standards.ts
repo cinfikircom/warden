@@ -7,7 +7,7 @@ import type { Checklist, ComplianceItem } from "../model/compliance.ts";
  * varsa kontrol ✖ Failed; yoksa – Unknown (Warden statik olarak "uyumlu" iddia etmez).
  */
 
-interface TrackedControl {
+export interface TrackedControl {
   readonly control: string;
   readonly title: string;
   match(f: Finding): boolean;
@@ -26,18 +26,20 @@ function build(name: string, standard: string, controls: readonly TrackedControl
   return { name, standard, items };
 }
 
-const has = (f: Finding, ...checks: string[]): boolean => checks.includes(f.check);
-const idStarts = (f: Finding, ...prefixes: string[]): boolean => prefixes.some((p) => f.id.startsWith(p));
+export const has = (f: Finding, ...checks: string[]): boolean => checks.includes(f.check);
+export const idStarts = (f: Finding, ...prefixes: string[]): boolean => prefixes.some((p) => f.id.startsWith(p));
 
 /** ISO 27001:2022 Annex A (seçili kontroller). */
 export function buildIsoChecklist(findings: readonly Finding[]): Checklist {
   const controls: TrackedControl[] = [
-    { control: "A.5.15", title: "Erişim kontrolü", match: (f) => has(f, "B5", "E1", "C3") || idStarts(f, "K8S-privileged") },
+    // NOT: "E1"/"E2"/"E5" check kodları hiçbir zaman emit edilmedi (ölü eşleşmeydi);
+    // v0.10'da gerçek kodlarla değiştirildi. Bkz. risk/owasp.ts.
+    { control: "A.5.15", title: "Erişim kontrolü", match: (f) => has(f, "B5", "ACC-1", "ACC-2", "ACC-3", "ACC-4", "C3") || idStarts(f, "K8S-privileged") },
     { control: "A.8.8", title: "Teknik zafiyet yönetimi", match: (f) => has(f, "B2") },
-    { control: "A.8.9", title: "Yapılandırma yönetimi", match: (f) => has(f, "B7", "B9", "E5") || f.module === "CLOUD" || f.module === "K8S" },
+    { control: "A.8.9", title: "Yapılandırma yönetimi", match: (f) => has(f, "B7", "B9", "FE-2", "FE-4", "WEB-2") || f.module === "CLOUD" || f.module === "K8S" },
     { control: "A.8.13", title: "Bilgi yedekleme", match: (f) => idStarts(f, "D1", "A5-backup") },
     { control: "A.8.15", title: "Loglama", match: (f) => has(f, "D2") },
-    { control: "A.8.24", title: "Kriptografi kullanımı", match: (f) => has(f, "B3", "E2", "B1", "D3") || idStarts(f, "AI-3") },
+    { control: "A.8.24", title: "Kriptografi kullanımı", match: (f) => has(f, "B3", "B1", "D3", "PRIV-3") || idStarts(f, "AI-3", "A5-cert-expiry") },
     { control: "A.8.25", title: "Güvenli geliştirme yaşam döngüsü", match: (f) => has(f, "D5") },
     { control: "A.8.28", title: "Güvenli kodlama", match: (f) => has(f, "B6") },
   ];

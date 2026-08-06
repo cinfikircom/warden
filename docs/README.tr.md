@@ -104,7 +104,7 @@ Frontend / AI Security genişletmeleri) ID, şiddet, faz ve durumu için bkz. [`
 🚧 Geliştirme aşamalı ilerliyor (bkz. iş emri §7).
 - **Faz 0** ✅ iskelet, yetki kapısı, bulgu modeli, boş-ama-geçerli rapor üretici.
 - **Faz 1** ✅ Stack tespiti (plugin dedektörler) + Modül A parity (A1 git · A2 Prisma derin · A3 runtime · A4 generic volume + env · A5 backup/TLS · A6 webhook) + Evidence Engine + **SARIF export** + Parity Risk Score.
-- **Faz 2** ✅ Modül B (SAST: B1 secret · B2 bağımlılık · B3 kripto · B4/FE auth · B5 IDOR · B6 injection · B7/B9 sertleştirme) + OWASP/ASVS eşleştirme + **run-to-run delta (öncesi/sonrası puanlama)** + `history.jsonl` trend.
+- **Faz 2** ✅ Modül B (SAST: B1 secret · B2 bağımlılık · B3 kripto · B4 auth · B5 IDOR · B6 injection · B7/B9 sertleştirme) + **Modül FE** (frontend güvenliği: DOM-XSS sink'leri · CSP · SRI · postMessage · tabnabbing) + OWASP/ASVS eşleştirme + **run-to-run delta (öncesi/sonrası puanlama)** + `history.jsonl` trend.
 - **Faz 3** ✅ Modül D (uyum & operasyonel olgunluk: D1 backup/DR · D2 observability · D3 secret mgmt · D4 veri koruma · D5 CI/CD) + **D7 PCI-DSS 4.0** (CVV/PAN + checklist) + **D8 Privacy/KVKK-GDPR** (checklist) → `compliance-report.md` (✔/⚠/✖).
 - **Faz 4** ✅ Modül C (DAST/**aktif, yetki kapılı**): C1 açıkta dosya · C2 header/TLS · C3 açık admin · C4 rate-limit · C6 cookie. Korumalı HTTP istemcisi (allow-list + rate-limit + GET-only + audit). Secret maskeleme artık **kaynakta** (tüm çıktılar maskeli).
 - **Faz 5** ✅ Risk motoru: **CVSS v4 taban skoru + exploitability** her bulguda; **OWASP ASVS checklist** (✔/⚠/✖); zenginleştirilmiş **remediation playbook** (risk + standart + konumlar + adımlar + test/kabul + delta geri-besleme).

@@ -21,6 +21,7 @@ export type { FindingPrompt } from "./report/prompt.ts";
 export { enrichRisk, scoreOf } from "./risk/score.ts";
 export type { Exploitability } from "./risk/score.ts";
 export { buildAsvsChecklist, violatedAsvsCodes } from "./risk/asvs.ts";
+export { buildOwaspChecklist, owaspCategoriesOf } from "./risk/owasp.ts";
 export { loadWaivers, partitionWaived, WAIVER_FILE } from "./risk/waiver.ts";
 export type { Waiver, WaiverLoad, AppliedWaiver, Partition } from "./risk/waiver.ts";
 export { buildCisChecklist, buildIsoChecklist } from "./risk/standards.ts";

@@ -9,7 +9,8 @@ import { looksLikeSecret } from "../../secret/mask.ts";
 
 /**
  * Modül B — Statik Uygulama Güvenliği (SAST, pasif/read-only).
- * B1 secret · B2 bağımlılık · B3 kripto · B4/FE auth · B5 authz · B6 injection · B7/B9 sertleştirme.
+ * B1 secret · B2 bağımlılık · B3 kripto · B4 auth · B5 authz · B6 injection · B7/B9 sertleştirme.
+ * (Frontend kontrolleri v0.10'da ayrıldı → Modül FE, modules/fe/.)
  * Çoğu kontrol bildirimsel kural setinden (rules.ts) gelir; B2 canlı audit'i sarmalar.
  */
 export const sastModule: WardenModule = {
@@ -22,7 +23,7 @@ export const sastModule: WardenModule = {
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
     const findings: Finding[] = [];
 
-    // Bildirimsel kaynak kuralları (B1/B3/B4/B5/B6/B7/B9/FE).
+    // Bildirimsel kaynak kuralları (B1/B3/B4/B5/B6/B7/B9).
     findings.push(...scanSource(ctx.fs, SAST_RULES));
 
     // Commit'lenmiş .env içinde gerçek secret (B1).

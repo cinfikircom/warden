@@ -21,7 +21,9 @@ export const DIMENSIONS: Record<ModuleId, string> = {
   B: "Statik Güvenlik (SAST)",
   C: "Dinamik / DAST",
   D: "Uyum & Operasyon",
-  E: "OWASP Top 10 / ASVS",
+  // "E" v0.10'da kaldırıldı — OWASP Top 10 artık skor boyutu değil, uyum checklist'i
+  // (risk/owasp.ts). Kalıcı "n/d" satırı böylece kayboldu; genel skor değişmedi çünkü
+  // n/d satırları zaten ortalamaya girmiyordu (bkz. overallScore).
   CLOUD: "Cloud Security",
   K8S: "Kubernetes",
   API: "API Security",

@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- FP muhafızı — bu dosya HİÇ bulgu üretmemeli. -->
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Harici kaynak SRI hash'i ile → FE-7 tetiklenmemeli. -->
+    <script
+      src="https://cdn.example.com/lib.js"
+      integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC"
+      crossorigin="anonymous"
+    ></script>
+    <!-- Göreli yol → SRI gerekmez, FE-7 tetiklenmemeli. -->
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/local/app.js"></script>
+  </head>
+  <body>
+    <a href="/help" target="_blank" rel="noopener">Yardım</a>
+  </body>
+</html>

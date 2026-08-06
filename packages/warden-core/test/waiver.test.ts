@@ -130,3 +130,24 @@ describe("partitionWaived — eşleşme + süre", () => {
     expect(waived[0]?.reason).toBe("self-match");
   });
 });
+
+describe("v0.10 göç uyarısı — E3/E8/E10 check kodları B6/B8 oldu", () => {
+  it("eski kodlu waiver yüklenir AMA açık uyarı verilir (sessizce eşleşmez kalmaz)", () => {
+    withWaiverFile(
+      `waivers:\n  - check: "E10"\n    reason: "eski kod"\n  - check: "E8"\n    reason: "eski kod"\n`,
+      (root) => {
+        const r = loadWaivers(root);
+        expect(r.waivers).toHaveLength(2); // yüklenir — sessizce atılmaz
+        expect(r.warnings).toHaveLength(2);
+        expect(r.warnings.join(" ")).toContain("B6");
+        expect(r.warnings.join(" ")).toContain("B8");
+      },
+    );
+  });
+
+  it("güncel kodlu waiver uyarı üretmez", () => {
+    withWaiverFile(`waivers:\n  - check: "B6"\n    reason: "güncel"\n`, (root) => {
+      expect(loadWaivers(root).warnings).toHaveLength(0);
+    });
+  });
+});

@@ -28,14 +28,18 @@ Durum: ✅ uygulandı · 🚧 kısmen · ⏳ planlı.
 |----|---------|-----|:------:|:---:|:-----:|------------|
 | B1 | Secret taraması (kod + commit'lenmiş .env): AWS/private key/Slack/GitHub/Stripe/Google/GitLab/npm token, sabit secret, **entropi tabanlı** tespit, **git geçmişi** taraması | pasif | P0 | 2 | ✅ | gitleaks/trufflehog · OWASP A07 |
 | B2 | Bağımlılık zafiyetleri: npm/pnpm audit (v6/v7 parser) + **OSV-Scanner** çok-ekosistem adapteri (`WARDEN_OSV=1`/import). pip-audit/govulncheck Faz 6 | pasif | P1 | 2 | ✅ | OWASP A06 · OSV/Snyk/Trivy |
-| B3 | Zayıf kripto: MD5/SHA1, ECB, CryptoJS EvpKDF, token için `Math.random()` | pasif | P1 | 2 | ✅ | OWASP A02 · ASVS 6.2 |
-| B4 | Auth tasarımı: JWT localStorage (FE), uzun TTL, **JWT `alg:none`**. Refresh rotation/session fixation 🚧 | pasif | P1 | 2 | ✅ | OWASP A07 · ASVS 3.x |
+| B3 | Zayıf kripto: MD5/SHA1, ECB, CryptoJS EvpKDF, token için `Math.random()`, **sabit/statik IV** (`createCipheriv`, `AES.new`) | pasif | P1 | 2 | ✅ | OWASP A02 · ASVS 6.2 · CWE-329 |
+| B4 | Auth tasarımı: uzun JWT TTL, **JWT `alg:none`**, **zayıf/sözlük JWT secret'ı**. Refresh rotation/session fixation 🚧. *(JWT-in-localStorage → Modül FE / FE-1)* | pasif | P0 | 2 | ✅ | OWASP A07 · ASVS 3.x |
 | B5 | Authz / multi-tenancy: IDOR adayı (heuristic, düşük güven). Tam RLS/tenant semantiği manuel | pasif | P1 | 2 | 🚧 | OWASP A01 · API1 (BOLA) · ASVS 4.x |
-| B6 | Injection: ham SQL concat, command injection, eval, **SSTI, path traversal, SSRF, open redirect, XXE** | pasif | P0 | 2 | ✅ | OWASP A03/A10 · semgrep |
+| B6 | Injection: ham SQL concat, command injection, eval, **SSTI, path traversal, SSRF, open redirect, XXE, NoSQL (`$where` + operatör), LDAP** | pasif | P0 | 2 | ✅ | OWASP A03/A10 · semgrep |
 | B8-deser | **Güvensiz deserialization** (node-serialize/vm · pickle/yaml.load · PHP unserialize · .NET BinaryFormatter) | pasif | P0 | 2 | ✅ | OWASP A08 |
 | B7 | Web sertleştirme: CORS wildcard. helmet/HSTS/rate-limit/CSRF varlığı 🚧 | pasif | P1 | 2 | 🚧 | OWASP A05 |
 | B8 | Girdi doğrulama kapsamı: Zod/Joi/pydantic endpoint kapsamı | pasif | P2 | 2 | ⏳ | ASVS 5.x |
 | B9 | Bilgi sızıntısı: yanıtta stack trace. debug flag/source map 🚧 | pasif | P2 | 2 | 🚧 | OWASP A05 |
+
+> **Recall sınırı (dürüst not):** tarayıcı **satır bazlıdır**. NoSQL/LDAP filtresi ya da IV önce
+> ayrı bir değişkende kurulup sonra çağrıya verilirse kaçırılır. Veri-akışı (taint) analizi
+> gelene kadar bu bilinçli bir sınırdır.
 
 ## Modül C — Dinamik / DAST & Pentest (AKTİF — yetki kapılı) · Faz 4
 
@@ -43,7 +47,7 @@ Durum: ✅ uygulandı · 🚧 kısmen · ⏳ planlı.
 
 | ID | Kontrol | Tip | Şiddet | Faz | Durum | Eşleştirme |
 |----|---------|-----|:------:|:---:|:-----:|------------|
-| C1 | Açıkta kalan dosya probe: `/.env`, `/.git/config`, `/backup.sql`, `/.tfstate`, swagger/actuator (içerik doğrulayıcılı) | aktif | P0 | 4 | ✅ | OWASP A05 |
+| C1 | Açıkta kalan dosya probe: `/.env`, `/.git/config`, `/backup.sql`, `/.tfstate`, swagger/actuator (içerik doğrulayıcılı) + **dizin listeleme / autoindex** (iki-sinyal doğrulayıcılı; listede `.env`/`.sql` görünürse P0) | aktif | P0 | 4 | ✅ | OWASP A05 · CWE-548 |
 | C2 | Security header & TLS (canlı): HSTS/CSP/X-Frame/nosniff + TLS sürüm/cert (node:tls) | aktif | P1 | 4 | ✅ | Mozilla TLS · CIS |
 | C3 | Korumasız admin paneli (GET, non-destructive). Default-cred DENEMESİ kasıtlı yapılmaz | aktif | P0 | 4 | ✅ | OWASP A01/A05 |
 | C4 | Rate-limit eşik testi: düşük-hacim (5 GET) 429 alıyor mu | aktif | P1 | 4 | ✅ | OWASP API4 |
@@ -55,32 +59,54 @@ Durum: ✅ uygulandı · 🚧 kısmen · ⏳ planlı.
 | ID | Kontrol | Tip | Şiddet | Faz | Durum | Eşleştirme |
 |----|---------|-----|:------:|:---:|:-----:|------------|
 | D1 | Backup & DR: yedek + restore drill (A5 sinyali); retention/off-site manuel | pasif | P2 | 3 | ✅ | ISO 27001 A.12 |
-| D2 | Gözlemlenebilirlik: hata izleme (Sentry/Datadog/OTel) bağımlılık tespiti | pasif | P2 | 3 | ✅ | — |
+| D2 | Gözlemlenebilirlik: hata izleme (Sentry/Datadog/OTel) bağımlılık tespiti | pasif | P2 | 3 | ✅ | OWASP A09 · CWE-778 |
 | D3 | Secret yönetimi: vault/KMS/secret-manager bağımlılığı yoksa düz `.env` uyarısı | pasif | P2 | 3 | ✅ | ISO 27001 A.10 |
 | D4 | Veri koruma (GDPR/KVKK): soft-delete (deletedAt) tespiti; export/retention manuel | pasif | P2 | 3 | ✅ | KVKK/GDPR |
-| D5 | CI/CD hijyeni: pipeline + test/lint kapısı tespiti (GitHub/GitLab/Circle/Azure/Jenkins) | pasif | P2 | 3 | ✅ | SLSA |
+| D5 | CI/CD hijyeni: pipeline + test/lint kapısı tespiti (GitHub/GitLab/Circle/Azure/Jenkins) + **artifact imzalama (cosign/sigstore) · SLSA provenance · SBOM yokluğu** | pasif | P2 | 3 | ✅ | SLSA v1.0 · OWASP A08 |
 | D6 | Rollback yeteneği: migration geri-alınabilirliği | pasif | P2 | 3 | ⏳ | — |
 | **D7** | **PCI-DSS 4.0:** CVV saklama (P0 yasak), PAN saklama/maskeleme (P1) + **PCI checklist** (TLS/MFA/logging) | pasif | P0 | 3 | ✅ | PCI-DSS 4.0 |
 | **D8** | **Privacy:** soft-delete + cookie-consent tespiti + **Privacy checklist** (silme/export/consent/retention) | pasif | P1 | 3 | ✅ | KVKK/GDPR |
 
-## Modül E — OWASP Top 10 (2021) + ASVS eşleştirme (pasif) · Faz 2–3
+## OWASP Top 10 (2021) — uyum checklist'i · v0.10
 
-OWASP açıklarını **açık isimle** bulur ve ASVS kontrollerine eşler. Raporda ASVS satırları
-✔ Passed / ⚠ Partial / ✖ Failed gösterilir.
+> **Değişiklik (v0.10): "Modül E" kaldırıldı.** OWASP Top 10 bir **taksonomidir**, bir tarama
+> boyutu değil. `MODULES` ve `DIMENSIONS` içinde `E` tanımlıydı ama hiçbir modül `module: "E"`
+> emit etmiyordu → skor tablosunda **kalıcı, yanıltıcı bir `n/d` satırı** duruyordu. Oysa OWASP
+> kapsamı fiilen vardı: repoda 96 adet `OWASP A0x:2021` referansı.
+>
+> Artık OWASP kapsamı, **çalışan modüllerin bulgularından** hibrit olarak türetilen bir uyum
+> checklist'idir (`risk/owasp.ts`):
+> **L1** bulgunun `references` alanındaki `OWASP A0x:2021` kodu · **L2** `check`/`module`/`id`
+> önekinden türetme. L2 zorunludur: `cloud`, `k8s`, `parity`, `compliance` ve SARIF/OSV
+> içe-aktarımı bulguları OWASP referansı taşımaz, saf referans-ayrıştırma bunlara kördür.
+>
+> Çıktı: `compliance-report.md` · `report.md` → "Uyum Özeti" · `findings.json.checklists`.
+>
+> **Durum yalnızca ✖ Failed veya – Unknown olabilir.** Warden statik analizle "bu kategoriden
+> geçtiniz" iddia etmez (dürüst raporlama, iş emri §8).
 
-| ID | OWASP | Kontroller | Faz | Durum |
-|----|-------|-----------|:---:|:-----:|
-| E1 | A01 Broken Access Control | IDOR · Missing RBAC · Tenant Escape · Horizontal/Vertical Privilege Escalation | 2 | ⏳ |
-| E2 | A02 Cryptographic Failures | MD5 · SHA1 · ECB · Fixed IV · Weak JWT Secret | 2 | ⏳ |
-| E3 | A03 Injection | SQL · NoSQL · Command · LDAP · SSTI | 2 | ⏳ |
-| E4 | A04 Insecure Design | tehdit modeli eksikliği, güvenli-olmayan akış | 2 | ⏳ |
-| E5 | A05 Security Misconfiguration | Debug Enabled · Directory Listing · Swagger Public · Open Admin Panel | 2 | ⏳ |
-| E6 | A06 Vulnerable Components | Snyk · OSV · Trivy (B2 ile paylaşımlı) | 2 | ⏳ |
-| E7 | A07 Auth Failures | zayıf parola, session, MFA yok | 2 | ⏳ |
-| E8 | A08 Software/Data Integrity | imzasız artifact, güvensiz deserialization | 2 | ⏳ |
-| E9 | A09 Logging/Monitoring Failures | yetersiz log, alarm yok | 3 | ⏳ |
-| E10 | A10 SSRF | sunucu-taraflı istek sahteciliği | 2 | ⏳ |
-| E-ASVS | **OWASP ASVS Mapping** | bulgu referanslarından ✖/– checklist (risk/asvs.ts); compliance-report.md'de | 5 | ✅ |
+| OWASP 2021 | Besleyen Warden kontrolleri | Durum |
+|---|---|:--:|
+| A01 Broken Access Control | B5 (IDOR) · ACC-1..4 · C3 · WEB-1 · UPLOAD-2 · `B6-path-traversal` · `B7-open-redirect` · CLOUD public-storage / IAM-wildcard / RDS-public | ✅ |
+| A02 Cryptographic Failures | B3 (MD5/SHA1/ECB/CryptoJS/`Math.random`/**sabit IV**) · `B3-go-insecure-tls` · PRIV-3 · `A5-cert-expiry` · AI-3 | ✅ |
+| A03 Injection | B6 (SQL · komut · eval · SSTI · **NoSQL** · **LDAP**) · FE-3 (DOM-XSS sink'leri) · EMAIL-1/2 | ✅ |
+| A04 Insecure Design | ACC-2 · tüm PAY · FLOW-1..3 · UPLOAD-1/3 | 🚧 |
+| A05 Security Misconfiguration | B7 · B9 · FE-2/4/6/7 · C1 (**dizin listeleme** dahil) · C2/C5/C6 · WEB-2/3 · API-4 · `B6-xxe` · tüm K8S · CLOUD ağ/SSL | ✅ |
+| A06 Vulnerable & Outdated Components | B2 (npm/pnpm audit · OSV) · CVE taşıyan SARIF/OSV içe-aktarımları | ✅ |
+| A07 Identification & Auth Failures | B1 (secret) · B4 (JWT TTL · `alg:none` · **zayıf secret**) · FE-1 · AUTH-1..6 · D3 · `K8S-plain-secret` | ✅ |
+| A08 Software & Data Integrity | `B8-*` güvensiz deserialization · D5 (**imzasız artifact / SLSA provenance / SBOM**) | ✅ |
+| A09 Logging & Monitoring Failures | D2 (hata izleme yok) · PRIV-1/2 (PII log/URL) · PRIV-5 (audit trail yok) | 🚧 |
+| A10 SSRF | `B6-ssrf-node` · `B6-ssrf-py` | ✅ |
+| ASVS | Bulgu referanslarından ✖/– checklist (`risk/asvs.ts`) — değişmedi | ✅ |
+
+> **A04 ve A09 neden 🚧?** İkisi de yalnızca yokluk-temelli heuristiklerle besleniyor:
+> tehdit-modeli tespiti yok, alarm/SIEM/saklama doğrulaması yok. ✅ demek yanıltıcı olurdu.
+>
+> **⚠ Göç notu (v0.10):** `check: "E3" | "E8" | "E10"` kodları `B6`/`B8`'e normalize edildi.
+> `check` hem fingerprint bileşeni hem waiver seçicisi olduğu için: (a) bu 7 kuralın
+> fingerprint'i **bir kez** değişir (delta raporunda tek seferlik "fixed + new"), (b)
+> `.warden-ignore.yml` içinde bu kodları kullanan waiver'ları güncelleyin — Warden çalıştırmada
+> bunun için açık uyarı verir.
 
 ## Modül CLOUD — Cloud Security (pasif/IaC; canlı kısımlar yetki kapılı) · Faz 6+
 
@@ -128,7 +154,7 @@ koşar; yokluk-temelli bayraklar yorumsuz kodda aranır.
 | PRIV-2 | PII URL/query string'inde (access-log + referrer sızıntısı) | + | ✅ | GDPR Art.5 · CWE-598 |
 | PRIV-3 | Yüksek-hassas alan at-rest şifreleme olmadan | + | ✅ | KVKK m.12 · GDPR Art.32 · CWE-311 |
 | PRIV-4 | Silme/anonimleştirme (KVKK/GDPR unutulma hakkı) yok | + | ✅ | KVKK m.7 · GDPR Art.17 |
-| PRIV-5 | Hassas veri erişim/değişiklik denetim izi (audit trail) yok | + | ✅ | GDPR Art.30 · ISO 27001 A.12.4 |
+| PRIV-5 | Hassas veri erişim/değişiklik denetim izi (audit trail) yok | + | ✅ | GDPR Art.30 · ISO 27001 A.12.4 · OWASP A09 |
 
 > PII yoksa PRIV hiç bulgu üretmez.
 
@@ -194,14 +220,42 @@ yüzeyi (multer/formidable/busboy/express-fileupload/@fastify/multipart…) vars
 
 ---
 
-## Modül FE — Frontend Security (React/Next vb., pasif) · Faz 2
+## Modül FE — Frontend Security (React/Next/Vue/Svelte/Astro, pasif) · Faz 2
 
-| ID | Kontrol | Faz | Durum |
-|----|---------|:---:|:-----:|
-| FE-1 | localStorage/sessionStorage'da JWT/token | 2 | ✅ |
-| FE-2 | Zayıf CSP (`unsafe-inline`/`unsafe-eval`) | 2 | ✅ |
-| FE-3 | XSS sink'leri · `dangerouslySetInnerHTML` · Vue `v-html` | 2 | ✅ |
-| FE-4 | Source map yayını (prod build config) | 2 | ✅ |
+Tarayıcıda çalışan kodun kendi saldırı yüzeyi: DOM-XSS sink'leri, token saklama, CSP zayıflığı,
+cross-origin mesajlaşma ve tedarik zinciri (SRI). Yalnızca bir **frontend yüzeyi** tespit edilirse
+koşar (`.jsx/.tsx/.vue/.svelte/.astro` dosyası **veya** `package.json`'da react/vue/svelte/astro/
+next/nuxt/angular/solid/preact/remix/gatsby bağımlılığı). Yüzey yoksa FE boyutu `n/d` kalır;
+**yüzey varsa ve bulgu yoksa 10/10 puanlanır.**
+
+`.html/.htm/.njk/.ejs/.hbs` şablonları da taranır — SAST'ın `CODE_FILE` deseni bunları
+kapsamaz, FE modülü `scanSource`'a kendi `include`'unu geçer. Ayrıca `maxDepth: 6` kullanır
+(varsayılan 4, monorepo'da `apps/web/src/components/ui/X.tsx` = 5 dizin).
+
+CSP · tabnabbing · SRI · message-origin kontrolleri **tek satıra sığmadığı için** satır-bazlı
+kural yerine **pencere analiziyle** yapılır (`modules/fe/index.ts`).
+
+| ID | Kontrol | Faz | Durum | Eşleştirme |
+|----|---------|:---:|:-----:|------------|
+| FE-1 | `localStorage`/`sessionStorage`'da JWT/token (`setItem` · `[...]=` · `.authToken=`) | 2 | ✅ | OWASP A07:2021 · ASVS 3.4 |
+| FE-2 | Zayıf CSP: `unsafe-inline`/`unsafe-eval` — **çok satırlı helmet/Next.js yazımı dahil** | 2 | ✅ | OWASP A05:2021 · CWE-1021 |
+| FE-3 | DOM-XSS sink'leri: `dangerouslySetInnerHTML` · Vue `v-html` · Svelte `{@html}` · Astro `set:html` · `innerHTML`/`outerHTML`/`document.write`/`insertAdjacentHTML` · `javascript:` URL · doğrulanmamış `href={…}` binding | 2 | ✅ | OWASP A03:2021 · CWE-79 · ASVS 5.3 |
+| FE-4 | Üretimde source map açık (`vite/webpack/next/nuxt/astro.config.[cm]?[jt]s`) | 2 | ✅ | OWASP A05:2021 · CWE-540 |
+| FE-5 | Cross-origin mesajlaşma: `postMessage(x, "*")` · `message` dinleyicisinde `origin` doğrulaması yok | + | ✅ | OWASP A05:2021 · CWE-942 · CWE-346 |
+| FE-6 | `target="_blank"` + `rel="noopener"` yok (reverse tabnabbing) | + | ✅ | OWASP A05:2021 · CWE-1022 |
+| FE-7 | Harici script/stylesheet SRI (`integrity`) yok — CDN ele geçirme / Magecart | + | ✅ | OWASP A08:2021 · CWE-353 |
+
+> **Heuristik / düşük güvenli kontroller** (`.warden-ignore.yml` ile bastırılabilir):
+> `FE-unsafe-url-binding` (P2/low — `href={link.url}` gibi meşru kullanımlar FP olabilir) ·
+> `FE-message-no-origin` (P1/low — yokluk temelli) · `FE-sri-missing` (P2/medium — GTM/analytics
+> loader'ları tasarım gereği SRI kullanamaz) · `FE-tabnabbing` (**P3** — modern tarayıcılar
+> `noopener`'ı örtük uygular; yalnızca eski tarayıcı desteği için gerekli).
+>
+> **⚠ Göç notu (v0.10):** Bu kontroller daha önce Modül B'nin (`sast/rules.ts`) içindeydi ve FE
+> boyutu yalnızca **bulgu varken** puanlanıyordu — temiz bir frontend asla 10/10 alamıyor, daima
+> `n/d` görünüyordu. Ayrıca `FE-2` (çok satırlı CSP) ve `FE-vue-vhtml`'in `.html` kısmı pratikte
+> **ölü kuraldı**. `FE-1`'in `check` kodu `B4` → `FE-1` düzeltildiği için o kuralın
+> **fingerprint'i bir kez değişir** (delta raporunda tek seferlik "fixed + new").
 
 ## Modül AI — AI / LLM Security (pasif) · Faz 6+
 

@@ -23,14 +23,7 @@ describe("SAST kaynak tarayıcı — bilinen açıkları kanıtla yakalar", () =
   it("B3 Math.random token", () => {
     expect(ids).toContain("B3-insecure-random");
   });
-  it("FE JWT localStorage (P1)", () => {
-    const f = findings.find((x) => x.id.startsWith("FE-jwt-localstorage"));
-    expect(f?.severity).toBe("P1");
-    expect(f?.module).toBe("FE");
-  });
-  it("FE dangerouslySetInnerHTML", () => {
-    expect(ids).toContain("FE-dangerous-html");
-  });
+  // NOT: FE kuralları v0.10'da Modül FE'ye taşındı — bkz. test/fe.test.ts.
   it("B6 SQL concat (P0)", () => {
     const f = findings.find((x) => x.id.startsWith("B6-sql-concat"));
     expect(f?.severity).toBe("P0");

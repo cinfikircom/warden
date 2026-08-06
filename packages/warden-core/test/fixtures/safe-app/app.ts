@@ -22,4 +22,31 @@ export function query(db: any, userId: string) {
   return db.query("SELECT * FROM users WHERE id = $1", [userId]);
 }
 
+// ---- v0.10 kuralları için FP muhafızı ------------------------------------
+// Aşağıdakiler yeni B6/B3/B4 kurallarının desenlerine YÜZEYDEN benzer ama güvenlidir.
+// Bu blok bulgu üretirse regex fazla geniş demektir — kuralı daralt, testi gevşetme.
+
+export function findUser(User: any, req: any) {
+  // Cast edilmiş değer — {"$ne":null} operatör enjeksiyonu imkânsız
+  return User.findOne({ email: String(req.body.email) });
+}
+
+export function encrypt(key: Buffer, plaintext: string) {
+  // Çağrı başına rastgele IV; şifreli metnin başına eklenir
+  const iv = randomBytes(16);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  return Buffer.concat([iv, cipher.update(plaintext), cipher.final()]);
+}
+
+export function issueToken(jwt: any, sub: string) {
+  // Secret env'den; algoritma açıkça belirtilmiş; kısa TTL
+  return jwt.sign({ sub }, process.env.JWT_SECRET as string, { algorithm: "HS256", expiresIn: "15m" });
+}
+
+export function ldapFind(client: any, filters: any, uid: string, cb: unknown) {
+  // Parametreli filtre nesnesi — string birleştirme yok
+  const filter = new filters.EqualityFilter({ attribute: "uid", value: uid });
+  return client.search("ou=users,dc=example,dc=com", { filter }, cb);
+}
+
 export { apiKey, placeholderToken };

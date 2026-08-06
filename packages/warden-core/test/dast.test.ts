@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { GuardedHttpClient } from "../src/modules/dast/client.ts";
 import type { FetchLike } from "../src/modules/dast/client.ts";
 import { makeDastModule, targetToBaseUrl } from "../src/modules/dast/index.ts";
-import { analyzeExposedFile, EXPOSED_PATHS } from "../src/modules/dast/exposed.ts";
+import { analyzeExposedFile, EXPOSED_PATHS, analyzeDirectoryListing, LISTING_PATHS } from "../src/modules/dast/exposed.ts";
 import { analyzeSecurityHeaders, analyzeCookies } from "../src/modules/dast/headers.ts";
 import { analyzeTls } from "../src/modules/dast/tls.ts";
 import { analyzeAdminExposure, analyzeRateLimit } from "../src/modules/dast/active-checks.ts";
@@ -163,5 +163,65 @@ describe("DAST analizörleri (saf)", () => {
     expect(targetToBaseUrl("localhost")).toBe("http://localhost");
     expect(targetToBaseUrl("staging.ornek.com")).toBe("https://staging.ornek.com");
     expect(targetToBaseUrl("https://x.com:8443/")).toBe("https://x.com:8443");
+  });
+});
+
+describe("C1b — dizin listeleme (autoindex)", () => {
+  const NGINX =
+    '<html><head><title>Index of /uploads/</title></head><body><h1>Index of /uploads/</h1><hr><pre><a href="../">../</a>\n<a href="notlar.txt">notlar.txt</a></pre><hr></body></html>';
+
+  it("nginx autoindex → P1 / check C1", () => {
+    const f = analyzeDirectoryListing("/uploads/", probe("http://h/uploads/", 200, NGINX, "text/html"));
+    expect(f?.severity).toBe("P1");
+    expect(f?.check).toBe("C1");
+    expect(f?.module).toBe("C");
+  });
+
+  it("listede .sql/.env görünüyorsa → P0 (kanıt temelli yükseltme)", () => {
+    const body = NGINX.replace('notlar.txt">notlar.txt', 'db.sql">db.sql');
+    expect(analyzeDirectoryListing("/backup/", probe("http://h/backup/", 200, body, "text/html"))?.severity).toBe("P0");
+  });
+
+  it("FP muhafızı: SPA her yola 200 HTML dönüyor → bulgu YOK", () => {
+    expect(
+      analyzeDirectoryListing("/uploads/", probe("http://h/uploads/", 200, '<html><div id="root"></div></html>', "text/html")),
+    ).toBeNull();
+  });
+
+  it("FP muhafızı: 'Index of' başlıklı normal sayfa (parent link yok) → bulgu YOK", () => {
+    const body = "<html><h1>Index of /our products</h1><p>Hoş geldiniz</p></html>";
+    expect(analyzeDirectoryListing("/files/", probe("http://h/files/", 200, body, "text/html"))).toBeNull();
+  });
+
+  it("FP muhafızı: JSON içerik → bulgu YOK", () => {
+    expect(analyzeDirectoryListing("/uploads/", probe("http://h/uploads/", 200, '{"Index of /":1}', "application/json"))).toBeNull();
+  });
+
+  it("404 → bulgu YOK", () => {
+    expect(analyzeDirectoryListing("/uploads/", probe("http://h/uploads/", 404, NGINX, "text/html"))).toBeNull();
+  });
+
+  it("GÜVENLİK: pasif modda LISTING_PATHS'a HİÇ istek atılmaz", async () => {
+    let calls = 0;
+    const fake: FetchLike = async (u) => {
+      calls++;
+      return resp(u, 200, { "content-type": "text/html" }, NGINX);
+    };
+    const mod = makeDastModule(fake);
+    const root = mkdtempSync(join(tmpdir(), "warden-dast-passive-"));
+    const ctx: ScanContext = {
+      projectRoot: root,
+      authz: authz("passive", ["localhost"]),
+      audit: tmpAudit(),
+      stack: EMPTY_STACK,
+      fs: createFsContext(root),
+    };
+    const out = await mod.run(ctx);
+    expect(calls).toBe(0);
+    expect(out.findings).toEqual([]);
+  });
+
+  it("probe yolları sınırlı tutulur (istek maliyeti tavanı)", () => {
+    expect(LISTING_PATHS.length).toBeLessThanOrEqual(6);
   });
 });

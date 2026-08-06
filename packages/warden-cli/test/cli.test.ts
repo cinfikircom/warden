@@ -5,6 +5,7 @@ import { mkdtempSync, existsSync, rmSync, mkdirSync, writeFileSync, readFileSync
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WARDEN_VERSION } from "@warden/core";
 
 /**
  * CLI uçtan-uca smoke test'i. index.ts import edildiğinde main()'i çalıştırıp
@@ -38,7 +39,10 @@ describe("Warden CLI smoke", () => {
   it("--version yalnızca sürümü yazar, exit 0", async () => {
     const { code, stdout } = await runCli(["--version"]);
     expect(code).toBe(0);
-    expect(stdout.trim()).toBe("0.9.0");
+    // Sürüm sabitini tekrarlama — tek doğruluk kaynağı WARDEN_VERSION. Burada test edilen
+    // davranış "yalnızca semver basar, başka çıktı yok".
+    expect(stdout.trim()).toBe(WARDEN_VERSION);
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("--help kullanım metnini gösterir, exit 0", async () => {

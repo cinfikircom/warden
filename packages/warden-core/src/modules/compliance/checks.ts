@@ -25,6 +25,14 @@ export interface ComplianceData {
   /** Yedekleme sinyali (A5 ile paylaşımlı). */
   readonly hasBackup: boolean;
   readonly hasRestore: boolean;
+  /** Yayınlanan artifact var mı (docker push / npm publish / gh release / goreleaser). */
+  readonly publishesArtifacts: boolean;
+  /** İmza sinyali: cosign / sigstore / notation / gpg --sign / npm publish --provenance. */
+  readonly hasArtifactSigning: boolean;
+  /** SLSA provenance / build attestation sinyali. */
+  readonly hasProvenance: boolean;
+  /** SBOM üretimi: syft / cyclonedx / spdx / trivy sbom. */
+  readonly hasSbom: boolean;
 }
 
 function has(deps: Readonly<Record<string, string>>, ...names: string[]): boolean {
@@ -68,7 +76,7 @@ export function analyzeCompliance(data: ComplianceData): { findings: Finding[]; 
         evidence: [{ type: "config", source: "package.json", excerpt: "observability bağımlılığı yok" }],
         impact: "Üretimdeki hatalar görünmez; olay müdahalesi kör ilerler.",
         recommendation: "Sentry/Datadog/OpenTelemetry entegre et; yapılandırılmış log + request korelasyon ID ekle.",
-        effort: "M", autoFixable: false, references: ["D2"],
+        effort: "M", autoFixable: false, references: ["D2", "OWASP A09:2021", "CWE-778"],
       }),
     );
   }
@@ -112,6 +120,31 @@ export function analyzeCompliance(data: ComplianceData): { findings: Finding[]; 
         impact: "Pipeline değişiklikleri doğrulamadan geçirebilir.",
         recommendation: "CI'a test + lint + güvenlik taraması adımı ekle; başarısızlıkta merge'i engelle.",
         effort: "S", autoFixable: false, references: ["D5"],
+      }),
+    );
+  }
+
+  // D5b — tedarik zinciri bütünlüğü: artifact yayınlanıyor ama imza/provenance yok.
+  // FP muhafızı: yalnızca GERÇEKTEN artifact yayınlayan projelerde koşar (salt-kütüphane
+  // veya monorepo-iç paketler tamamen dışlanır).
+  if (data.publishesArtifacts && !data.hasArtifactSigning && !data.hasProvenance) {
+    const missing = [
+      "imza (cosign/sigstore/notation)",
+      "SLSA provenance/attestation",
+      ...(data.hasSbom ? [] : ["SBOM (syft/cyclonedx)"]),
+    ].join(" · ");
+    findings.push(
+      makeFinding({
+        id: "D5-unsigned-artifact",
+        title: "Yayınlanan artifact imzalanmıyor (tedarik zinciri bütünlüğü doğrulanamaz)",
+        severity: "P2", module: "D", check: "D5", category: "Supply Chain Integrity", confidence: "medium",
+        evidence: [{ type: "config", source: data.ciFiles[0] ?? "CI", excerpt: `yayın adımı var; eksik: ${missing}` }],
+        impact:
+          "İmzasız/attestation'sız artifact, kayıt defteri ele geçirilse veya build ortamına sızılsa bile ayırt edilemez; tüketiciler 'bu image gerçekten bu pipeline'dan mı çıktı' sorusunu doğrulayamaz (SolarWinds sınıfı risk).",
+        recommendation:
+          "cosign ile keyless imzala (`cosign sign --yes $IMAGE`) ve dağıtımda `cosign verify` ile doğrula; GitHub'da `actions/attest-build-provenance` (SLSA v1) ekle; npm'de `--provenance` ile yayınla; SBOM üret (syft/cyclonedx) ve release'e ekle.",
+        effort: "M", autoFixable: false,
+        references: ["D5", "SLSA v1.0 Build L2", "OWASP A08:2021", "CWE-494"],
       }),
     );
   }
