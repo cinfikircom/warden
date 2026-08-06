@@ -20,6 +20,8 @@ export interface FindingInput {
   readonly cvss?: number;
   readonly cves?: readonly string[];
   readonly reachable?: boolean;
+  /** Taint sonucu — fingerprint'e GİRMEZ (bkz. fingerprintOf: yalnızca module/check/title/evidence). */
+  readonly taint?: NonNullable<Finding["taint"]>;
 }
 
 /** İçerik-türevli kararlı fingerprint (çalıştırmalar arası dedup + CI gate). */

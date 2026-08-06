@@ -98,4 +98,18 @@ export interface Finding {
    * NOT: import-seviyesi heuristik; tam çağrı-grafı analizi değil.
    */
   readonly reachable?: boolean;
+  /**
+   * Dosya-içi taint (veri-akışı) sonucu: kullanıcı girdisi bu sink'e ulaşıyor mu.
+   * Yalnızca `taintAware` kuralları için doldurulur (bkz. modules/sast/taint.ts).
+   *
+   * ⚠ Tam veri-akışı analizi DEĞİL: dosya içi, düz atama zinciri, kontrol akışı yok.
+   * "Ulaşıyor OLABİLİR" anlamında bir ipucudur; bu yüzden yalnızca `confidence`'ı ayarlar,
+   * kendi başına bulgu üretmez ve fingerprint'e girmez (waiver/delta kararlılığı korunur).
+   */
+  readonly taint?: {
+    readonly reached: boolean;
+    readonly sourceLine: number;
+    readonly sourceExpr: string;
+    readonly sanitized: boolean;
+  };
 }

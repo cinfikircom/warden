@@ -4,6 +4,8 @@ import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
 import { maskSecrets } from "../../secret/mask.ts";
 import { VENDOR_PATH, TEST_PATH, MINIFIED_PATH } from "../../util/paths.ts";
+import { buildTaintMap, evaluateTaint, adjustConfidence } from "./taint.ts";
+import type { TaintMap } from "./taint.ts";
 
 /**
  * Bildirimsel kaynak kuralı. SAST kontrollerinin çoğu (B1/B3/B4/B6/FE) bununla ifade edilir;
@@ -35,6 +37,15 @@ export interface SourceRule {
   readonly evidenceType?: EvidenceType;
   /** Dosya başına aynı kuraldan en fazla bulgu (gürültüyü sınırlar). */
   readonly maxPerFile?: number;
+  /**
+   * Bu kural bir SINK mi — yani kullanıcı girdisi buraya ulaşırsa tehlikeli mi?
+   *
+   * `true` ise dosyanın taint haritası hesaplanır ve bulgunun `confidence`'ı buna göre
+   * ayarlanır: girdi ulaşıyorsa yükseltilir, ulaşmıyorsa düşürülür, temizlenmişse `low`.
+   * Yalnızca güven değişir — başlık/kontrol/kanıt sabit kalır, dolayısıyla fingerprint ve
+   * mevcut waiver'lar korunur. Bkz. modules/sast/taint.ts.
+   */
+  readonly taintAware?: boolean;
 }
 
 /** Varsayılan kod dosyası deseni. Modüller kendi `include`'unu geçerek genişletebilir (ör. FE: .html). */
@@ -82,10 +93,17 @@ export function scanSource(ctx: DetectContext, rules: readonly SourceRule[], opt
   const findings: Finding[] = [];
   const seen = new Set<string>();
 
+  // Taint haritası dosya başına EN FAZLA BİR KEZ, ve yalnızca o dosyada taint-farkındalı
+  // bir kural gerçekten eşleşirse hesaplanır (tembel). Sink'ler seyrek olduğu için tipik
+  // taramada haritanın maliyeti hiç ödenmez.
+  const taintAwareExists = rules.some((r) => r.taintAware);
+
   for (const file of files) {
     const text = ctx.readFile(file);
     if (text === null || text.length > maxBytes) continue;
     const lines = text.split(/\r?\n/);
+    let taintMap: TaintMap | null = null;
+    const getTaintMap = (): TaintMap => (taintMap ??= buildTaintMap(lines));
 
     for (const rule of rules) {
       if (rule.pathInclude && !rule.pathInclude.test(file)) continue;
@@ -98,6 +116,12 @@ export function scanSource(ctx: DetectContext, rules: readonly SourceRule[], opt
         if (!rule.pattern.test(line)) continue;
         if (rule.validate && !rule.validate(line)) continue;
         hits++;
+
+        // Taint: yalnızca sink kurallarında, yalnızca eşleşme olduktan sonra.
+        const taint =
+          taintAwareExists && rule.taintAware ? evaluateTaint(getTaintMap(), line, i + 1) : null;
+        const confidence = rule.taintAware ? adjustConfidence(rule.confidence, taint) : rule.confidence;
+
         const f = makeFinding({
           id: `${rule.id}:${file}:${i + 1}`,
           title: rule.title,
@@ -105,7 +129,8 @@ export function scanSource(ctx: DetectContext, rules: readonly SourceRule[], opt
           module: rule.module,
           check: rule.check,
           category: rule.category,
-          confidence: rule.confidence,
+          confidence,
+          ...(taint ? { taint } : {}),
           evidence: [
             {
               type: rule.evidenceType ?? "file",

@@ -219,6 +219,15 @@ function renderReportMd(findings: readonly Finding[], meta: ReportMeta): string 
       lines.push("");
       lines.push(`- **ID:** \`${f.id}\` · **Kontrol:** ${f.check} · **Kategori:** ${f.category} · **Güven:** ${f.confidence}`);
       if (f.cvss !== undefined) lines.push(`- **CVSS v4:** ${f.cvss.toFixed(1)}${f.exploitability ? ` · **Exploitability:** ${f.exploitability}` : ""}`);
+      // Taint: güvenin NEDEN yükseldiğini/düştüğünü göster. Sınırı da yaz — okuyucu bunu
+      // "kanıtlanmış sömürülebilirlik" sanmamalı.
+      if (f.taint) {
+        lines.push(
+          `- **Veri akışı:** kullanıcı girdisi (\`${maskSecrets(f.taint.sourceExpr)}\`, satır ${f.taint.sourceLine}) ` +
+            `bu satıra ulaşıyor${f.taint.sanitized ? " ancak yol üzerinde bir temizleyici var" : ""}. ` +
+            `_(dosya-içi heuristik; fonksiyonlar/dosyalar arası akış izlenmez)_`,
+        );
+      }
       if (f.references && f.references.length > 0) lines.push(`- **Eşleştirme:** ${f.references.join(", ")}`);
       lines.push(`- **Etki:** ${maskSecrets(f.impact)}`);
       lines.push(`- **Öneri:** ${maskSecrets(f.recommendation)} _(efor: ${f.effort}${f.autoFixable ? ", otomatik-düzeltilebilir" : ""})_`);

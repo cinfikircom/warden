@@ -45,7 +45,7 @@ export const FE_RULES: readonly SourceRule[] = [
 
   // ---- FE-3: XSS sink'leri ------------------------------------------------
   {
-    id: "FE-dangerous-html",
+    id: "FE-dangerous-html", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "dangerouslySetInnerHTML (XSS sink)",
@@ -63,7 +63,7 @@ export const FE_RULES: readonly SourceRule[] = [
     maxPerFile: 3,
   },
   {
-    id: "FE-vue-vhtml",
+    id: "FE-vue-vhtml", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "Vue v-html (XSS sink)",
@@ -81,7 +81,7 @@ export const FE_RULES: readonly SourceRule[] = [
     maxPerFile: 3,
   },
   {
-    id: "FE-svelte-html",
+    id: "FE-svelte-html", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "Svelte {@html ...} (XSS sink)",
@@ -98,7 +98,7 @@ export const FE_RULES: readonly SourceRule[] = [
     maxPerFile: 3,
   },
   {
-    id: "FE-astro-set-html",
+    id: "FE-astro-set-html", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "Astro set:html (XSS sink)",
@@ -115,7 +115,7 @@ export const FE_RULES: readonly SourceRule[] = [
     maxPerFile: 3,
   },
   {
-    id: "FE-innerhtml-sink",
+    id: "FE-innerhtml-sink", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "innerHTML/outerHTML/document.write ile HTML yazımı (XSS sink)",
@@ -138,7 +138,7 @@ export const FE_RULES: readonly SourceRule[] = [
     maxPerFile: 2,
   },
   {
-    id: "FE-javascript-url",
+    id: "FE-javascript-url", taintAware: true,
     check: "FE-3",
     module: "FE",
     title: "javascript: URL (script çalıştıran bağlantı)",

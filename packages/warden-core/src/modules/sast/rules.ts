@@ -139,7 +139,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- B6 Injection -------------------------------------------------------
   {
-    id: "B6-sql-concat", check: "B6", module: "B", title: "SQL string birleştirme (SQL Injection)",
+    id: "B6-sql-concat", taintAware: true, check: "B6", module: "B", title: "SQL string birleştirme (SQL Injection)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /(query|execute|raw|\$queryRawUnsafe)\s*\(\s*[`'"].*\b(SELECT|INSERT|UPDATE|DELETE|DROP|FROM|WHERE)\b[\s\S]*?(\+|\$\{)/i,
     impact: "Kullanıcı girdisi SQL'e birleştiriliyor; SQL Injection mümkün.",
@@ -147,7 +147,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A03:2021", "OWASP API8", "ASVS 5.3.4"], effort: "M",
   },
   {
-    id: "B6-command-injection", check: "B6", module: "B", title: "Komut enjeksiyonu yüzeyi (exec + dinamik girdi)",
+    id: "B6-command-injection", taintAware: true, check: "B6", module: "B", title: "Komut enjeksiyonu yüzeyi (exec + dinamik girdi)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /\b(exec|execSync|spawnSync)\s*\(\s*[`'"][^`'"]*(\$\{|['"]\s*\+)/i,
     impact: "Kullanıcı girdisi shell komutuna giriyor; RCE riski.",
@@ -155,7 +155,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A03:2021", "ASVS 5.3.8"], effort: "M",
   },
   {
-    id: "B6-eval", check: "B6", module: "B", title: "eval() kullanımı (kod enjeksiyonu)",
+    id: "B6-eval", taintAware: true, check: "B6", module: "B", title: "eval() kullanımı (kod enjeksiyonu)",
     severity: "P1", category: "Injection", confidence: "high",
     pattern: /(^|[^.\w])eval\s*\(/,
     impact: "eval dinamik kod çalıştırır; girdi kontrol edilemiyorsa RCE.",
@@ -192,7 +192,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021", "ASVS 6.2.3"], effort: "S",
   },
   {
-    id: "B6-py-shell-true", check: "B6", module: "B", title: "subprocess shell=True (komut enjeksiyonu)",
+    id: "B6-py-shell-true", taintAware: true, check: "B6", module: "B", title: "subprocess shell=True (komut enjeksiyonu)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /subprocess\.(run|call|Popen|check_output)\s*\([^)]*shell\s*=\s*True/, pathInclude: /\.py$/,
     impact: "shell=True + dinamik girdi RCE'ye yol açar.", recommendation: "Argüman listesi kullan; shell=False; girdiyi doğrula.",
@@ -229,14 +229,14 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021", "ASVS 6.2.3"], effort: "S",
   },
   {
-    id: "B6-php-command", check: "B6", module: "B", title: "PHP komut çalıştırma (exec/shell_exec/system)",
+    id: "B6-php-command", taintAware: true, check: "B6", module: "B", title: "PHP komut çalıştırma (exec/shell_exec/system)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /\b(exec|shell_exec|system|passthru|popen|proc_open)\s*\([^)]*\$/, pathInclude: /\.php$/,
     impact: "Dinamik girdi shell'e giriyor; RCE riski.", recommendation: "escapeshellarg/escapeshellcmd; mümkünse komut çalıştırmaktan kaçın.",
     references: ["OWASP A03:2021"], effort: "M",
   },
   {
-    id: "B6-laravel-raw-sql", check: "B6", module: "B", title: "Laravel ham SQL (DB::raw/whereRaw + birleştirme)",
+    id: "B6-laravel-raw-sql", taintAware: true, check: "B6", module: "B", title: "Laravel ham SQL (DB::raw/whereRaw + birleştirme)",
     severity: "P1", category: "Injection", confidence: "medium",
     pattern: /(DB::raw|->whereRaw|->selectRaw|DB::select)\s*\([^;)]*\.\s*\$/, pathInclude: /\.php$/,
     impact: "Kullanıcı girdisi ham SQL'e birleştiriliyor; SQL Injection.", recommendation: "Parametre bağla (binding); Eloquent/Query Builder güvenli API.",
@@ -273,14 +273,14 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021", "ASVS 6.2.3"], effort: "S",
   },
   {
-    id: "B6-dotnet-sql", check: "B6", module: "B", title: ".NET ham SQL (FromSqlRaw/ExecuteSqlRaw + birleştirme)",
+    id: "B6-dotnet-sql", taintAware: true, check: "B6", module: "B", title: ".NET ham SQL (FromSqlRaw/ExecuteSqlRaw + birleştirme)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /(FromSqlRaw|ExecuteSqlRaw|new\s+SqlCommand)\s*\(\s*[$@]*["'].*\+/, pathInclude: /\.cs$/,
     impact: "Kullanıcı girdisi ham SQL'e giriyor; SQL Injection.", recommendation: "Parametreli sorgu (FromSqlInterpolated / SqlParameter).",
     references: ["OWASP A03:2021"], effort: "M",
   },
   {
-    id: "B6-dotnet-process", check: "B6", module: "B", title: ".NET Process.Start (dinamik girdi)",
+    id: "B6-dotnet-process", taintAware: true, check: "B6", module: "B", title: ".NET Process.Start (dinamik girdi)",
     severity: "P1", category: "Injection", confidence: "low",
     pattern: /Process\.Start\s*\(/, pathInclude: /\.cs$/,
     impact: "Dinamik girdiyle komut çalıştırma; injection riski.", recommendation: "Argümanları ProcessStartInfo ile ayır; girdiyi doğrula.",
@@ -310,14 +310,14 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A02:2021"], effort: "S",
   },
   {
-    id: "B6-go-sql", check: "B6", module: "B", title: "Go SQL birleştirme/Sprintf (SQL Injection)",
+    id: "B6-go-sql", taintAware: true, check: "B6", module: "B", title: "Go SQL birleştirme/Sprintf (SQL Injection)",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /\.(Query|QueryRow|Exec|QueryContext|ExecContext)\s*\(\s*(fmt\.Sprintf|[^,)]*\+)/, pathInclude: /\.go$/,
     impact: "Girdi SQL'e birleştiriliyor (Sprintf/+); SQL Injection.", recommendation: "Parametreli sorgu ($1, ?) ve argümanlar kullan.",
     references: ["OWASP A03:2021"], effort: "M",
   },
   {
-    id: "B6-go-command", check: "B6", module: "B", title: "Go exec.Command (dinamik girdi birleştirme)",
+    id: "B6-go-command", taintAware: true, check: "B6", module: "B", title: "Go exec.Command (dinamik girdi birleştirme)",
     severity: "P1", category: "Injection", confidence: "low",
     pattern: /exec\.Command(Context)?\s*\([^)]*\+/, pathInclude: /\.go$/,
     impact: "Dinamik girdiyle komut; injection riski.", recommendation: "Argümanları ayrı geç; girdiyi allow-list ile doğrula.",
@@ -357,7 +357,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- SSRF (OWASP A10) --------------------------------------------------
   {
-    id: "B6-ssrf-node", check: "B6", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
+    id: "B6-ssrf-node", taintAware: true, check: "B6", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
     severity: "P1", category: "SSRF", confidence: "low",
     pattern: /\b(axios|fetch|got|superagent|http|https)\s*(\.\w+)?\s*\(\s*[`'"]?[^)]*(req\.(params|query|body)|ctx\.(request|query|params))/i,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
@@ -366,7 +366,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A10:2021", "ASVS 12.6"], effort: "M",
   },
   {
-    id: "B6-ssrf-py", check: "B6", module: "B", title: "SSRF adayı: requests/urlopen hedefi girdiden",
+    id: "B6-ssrf-py", taintAware: true, check: "B6", module: "B", title: "SSRF adayı: requests/urlopen hedefi girdiden",
     severity: "P1", category: "SSRF", confidence: "low",
     pattern: /\b(requests\.(get|post|put|delete|head)|urllib\.request\.urlopen|urlopen|httpx\.(get|post))\s*\(\s*[^)]*request\.(GET|POST|data|args)/,
     pathInclude: /\.py$/,
@@ -377,7 +377,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- SSTI (Server-Side Template Injection) -----------------------------
   {
-    id: "B6-ssti-py", check: "B6", module: "B", title: "SSTI adayı: render_template_string dinamik girdiyle",
+    id: "B6-ssti-py", taintAware: true, check: "B6", module: "B", title: "SSTI adayı: render_template_string dinamik girdiyle",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /render_template_string\s*\(\s*[^)]*(\+|%|\.format\(|f['"]|request\.)/,
     pathInclude: /\.py$/,
@@ -386,7 +386,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A03:2021"], effort: "M",
   },
   {
-    id: "B6-ssti-node", check: "B6", module: "B", title: "SSTI adayı: template derleme dinamik girdiyle",
+    id: "B6-ssti-node", taintAware: true, check: "B6", module: "B", title: "SSTI adayı: template derleme dinamik girdiyle",
     severity: "P1", category: "Injection", confidence: "low",
     pattern: /\b(Handlebars\.compile|ejs\.render|pug\.compile|_\.template)\s*\(\s*[^)]*(req\.|\$\{|\+)/,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
@@ -397,7 +397,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- Path traversal ----------------------------------------------------
   {
-    id: "B6-path-traversal-node", check: "B6", module: "B", title: "Path traversal adayı: dosya yolu istemci girdisinden",
+    id: "B6-path-traversal-node", taintAware: true, check: "B6", module: "B", title: "Path traversal adayı: dosya yolu istemci girdisinden",
     severity: "P1", category: "Path Traversal", confidence: "low",
     pattern: /\b(readFile|readFileSync|createReadStream|sendFile|res\.sendFile|res\.download)\s*\(\s*[^)]*(req\.(params|query|body)|ctx\.params)/,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
@@ -406,7 +406,7 @@ export const SAST_RULES: readonly SourceRule[] = [
     references: ["OWASP A01:2021", "ASVS 12.3"], effort: "M",
   },
   {
-    id: "B6-path-traversal-py", check: "B6", module: "B", title: "Path traversal adayı: open() istemci girdisiyle",
+    id: "B6-path-traversal-py", taintAware: true, check: "B6", module: "B", title: "Path traversal adayı: open() istemci girdisiyle",
     severity: "P1", category: "Path Traversal", confidence: "low",
     pattern: /\bopen\s*\(\s*[^)]*(request\.(GET|POST|args|data)|os\.path\.join\([^)]*request\.)/,
     pathInclude: /\.py$/,
@@ -498,7 +498,7 @@ export const SAST_RULES: readonly SourceRule[] = [
 
   // ---- B6 NoSQL injection (A03) ------------------------------------------
   {
-    id: "B6-nosql-where", check: "B6", module: "B", title: "NoSQL injection: $where/$function JavaScript'i dinamik girdiyle",
+    id: "B6-nosql-where", taintAware: true, check: "B6", module: "B", title: "NoSQL injection: $where/$function JavaScript'i dinamik girdiyle",
     severity: "P0", category: "Injection", confidence: "medium",
     pattern: /\$(?:where|function|accumulator)\s*[:=]\s*(?:[`'"][^\n]{0,120}?(?:\$\{|['"]\s*\+|\+\s*['"`])|[A-Za-z_$][\w$]*\s*\+|(?:req|ctx|request)\.)/i,
     impact: "$where MongoDB sunucusunda JavaScript çalıştırır; istemci girdisi buraya girerse tam koleksiyon okuma ve veri sızıntısı mümkün.",

@@ -208,7 +208,7 @@ Sıra risk-artan ve fingerprint-nötr işleri öne alacak biçimde kuruldu.
 | 1 | `detect/fs.ts` `maxDepth` kör noktası (13 modülü etkiliyor) | **yeni bulgu dalgası** | orta | ✅ |
 | 1b | Waiver `path` selector'ı + Warden self-match'leri | yok | düşük | ✅ |
 | 2 | Diff-scope tarama (`--since`) — §1.1 | yok | düşük | ✅ |
-| 3 | Taint katmanı (dosya-içi) — §1.2 + §1.5 | yok (yalnız `confidence`) | orta | ⏳ |
+| 3 | Taint katmanı (dosya-içi) — §1.2 + §1.5 | yok (yalnız `confidence`) | orta | ✅ |
 | 4 | Opsiyonel TypeScript AST — §1.3 | yok | orta | ⏳ |
 | 5 | Rule Packs — §1.4 | yeni kural = yeni bulgu | düşük | ⏳ |
 
@@ -241,6 +241,34 @@ Diff-scope'ta en kolay hata, kısmi sonucu tam postür kaydıyla karıştırmakt
 - **Delta hesaplanmaz.** Boş delta, yanlış delta'dan iyidir.
 - Kapsam çözülemezse (git yok, ref yok) **tam taramaya düşülür ve gürültülü uyarılır** —
   sessizce eksik tarama yapmaktansa beklenenden yavaş çalışmak yeğdir.
+
+### Sıra 3'ün tasarım kararı (kayıt) — sinyalin asimetrisi
+
+Taint katmanının ilk tasarımında güven iki yönlü ayarlanıyordu: girdi ulaşıyorsa yükselt,
+ulaşmıyorsa düşür. **Bu yanlıştı ve uygulanmadan önce düzeltildi.**
+
+Motorun pozitif kararı ("girdi ulaşıyor") güvenilirdir — kaynaktan sink'e giden atama zinciri
+fiilen görülmüştür. Negatif kararı ("ulaşmıyor") güvenilir değildir, çünkü analiz dosya-içi ve
+düz atamalarla sınırlı: fonksiyonlar arası ya da dosyalar arası akışla gelen gerçek bir zafiyet
+motora görünmez. İki yönlü ayar, tam da motorun kör olduğu yerlerde gerçek zafiyetlerin güvenini
+düşürür ve onları raporun dibine gömerdi.
+
+Nihai davranış:
+
+| Taint sonucu | Güven |
+|---|---|
+| ulaşıyor + temizlenmemiş | **yükselir** (low→medium→high) |
+| temizlenmiş | bir kademe düşer, `low`'un altına inmez |
+| bulunamadı | **hiç dokunulmaz** |
+
+Son satır bu katmanın en önemli güvencesi: **taint eklemek hiçbir mevcut bulgunun görünürlüğünü
+azaltamaz.** Katman yalnızca bilgi ekler, asla bilgi gizlemez.
+
+`severity` de bilerek dokunulmadan bırakıldı — severity `--fail-on` CI gate'ini sürüyor ve
+heuristik bir sinyalin build kırma kararını değiştirmesi, bu katmanın hak ettiğinden fazla
+yetki almasıdır.
+
+23 kural taint-farkındalı işaretlendi (17 B6 injection sink'i + 6 FE DOM-XSS sink'i).
 
 **Sıra 1 hakkında uyarı:** `maxDepth` varsayılanı 4→6 çıkarmak Strix işi değil, mevcut sistemin
 kendi borcu. Ama monorepo'larda (`apps/web/src/components/ui/X.tsx` = 5 seviye) **tüm modüller**
