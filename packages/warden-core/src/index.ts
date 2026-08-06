@@ -44,6 +44,9 @@ export { analyzeEfMigrations, collectDotnetData } from "./modules/parity/schema-
 
 export { defaultDetectors, detectStack } from "./detect/registry.ts";
 export type { StackDetector, DetectionResult, DetectContext } from "./detect/types.ts";
+export { createFsContext, DEFAULT_MAX_DEPTH } from "./detect/fs.ts";
+export { resolveGitScope } from "./detect/scope.ts";
+export type { ScanScope, ScopeResult } from "./detect/scope.ts";
 export { defaultModules } from "./registry.ts";
 export { parityModule } from "./modules/parity/index.ts";
 export { sastModule } from "./modules/sast/index.ts";

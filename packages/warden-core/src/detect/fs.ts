@@ -38,8 +38,19 @@ const ALLOW_DOT_DIRS = new Set([".github", ".circleci", ".gitlab"]);
  */
 export const DEFAULT_MAX_DEPTH = 6;
 
-/** READ-ONLY dosya bağlamı — dedektörler ve modüller bunu kullanır. */
-export function createFsContext(projectRoot: string): DetectContext {
+/**
+ * READ-ONLY dosya bağlamı — dedektörler ve modüller bunu kullanır.
+ *
+ * `scopePaths` verilirse (diff-scope tarama, bkz. detect/scope.ts) YALNIZCA `find()`
+ * daraltılır; `exists()` ve `readFile()` bilerek tam ağaca bakmaya devam eder.
+ *
+ * Bu ayrım kritik: modüllerin çoğu bir korumanın VARLIĞINI `exists()`/`readFile()` ile
+ * yoklar ("helmet kurulu mu", "backup script'i var mı"). Onları da kapsama daraltmak,
+ * kapsam dışında kaldığı için görülemeyen her korumayı "yok" saydırır ve kısmi tarama
+ * bir yokluk-temelli yanlış pozitif fabrikasına dönerdi. Daralan şey "neyi TARIYORUZ",
+ * "proje neye SAHİP" değil.
+ */
+export function createFsContext(projectRoot: string, scopePaths?: ReadonlySet<string>): DetectContext {
   const readFile = (relPath: string): string | null => {
     try {
       return readFileSync(join(projectRoot, relPath), "utf8");
@@ -71,6 +82,7 @@ export function createFsContext(projectRoot: string): DetectContext {
           walk(full, depth + 1);
         } else if (e.isFile()) {
           const rel = relative(projectRoot, full).split(sep).join("/");
+          if (scopePaths && !scopePaths.has(rel)) continue;
           if (predicate(rel)) out.push(rel);
         }
       }

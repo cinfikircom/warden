@@ -17,6 +17,8 @@ import { buildCisChecklist, buildIsoChecklist } from "./risk/standards.ts";
 import type { ScanContext, WardenModule } from "./model/module.ts";
 import type { Finding, ModuleId } from "./model/finding.ts";
 import { createFsContext } from "./detect/fs.ts";
+import { resolveGitScope } from "./detect/scope.ts";
+import type { ScanScope } from "./detect/scope.ts";
 import { detectStack, defaultDetectors } from "./detect/registry.ts";
 import type { StackDetector } from "./detect/types.ts";
 import { defaultModules } from "./registry.ts";
@@ -58,6 +60,12 @@ export interface ScanOptions {
   readonly modules?: readonly WardenModule[];
   /** Dedektör seti. Verilmezse yerleşik set. */
   readonly detectors?: readonly StackDetector[];
+  /**
+   * Diff-scope tarama: verilen git referansından bu yana değişen dosyalarla sınırla
+   * (ör. "HEAD~1", "origin/main"). Çözülemezse tarama TAM kapsamla sürer — kapsam
+   * daraltması sessizce başarısız olup eksik denetimi tam denetim gibi göstermemeli.
+   */
+  readonly since?: string;
 }
 
 export interface ScanResult {
@@ -72,6 +80,11 @@ export interface ScanResult {
   readonly paths: ReportPaths;
   readonly startedAt: string;
   readonly finishedAt: string;
+  /**
+   * Diff-scope uygulandıysa kapsam özeti; tam taramada null. CLI bunu "kısmi sonuç" uyarısı
+   * göstermek ve delta'yı bastırmak için kullanır.
+   */
+  readonly scope: { readonly since: string; readonly fileCount: number } | null;
 }
 
 /**
@@ -107,7 +120,25 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
       `orm=[${stack.orm.join(",")}] cloud=[${stack.cloud.join(",")}] containerized=${stack.containerized}`,
   );
 
-  const fs = createFsContext(opts.projectRoot);
+  // 2b) Diff-scope: kapsam daraltma yalnızca --since verildiğinde.
+  let scope: ScanScope | null = null;
+  if (opts.since !== undefined) {
+    const r = resolveGitScope(opts.projectRoot, opts.since, audit);
+    if (r.scope) {
+      scope = r.scope;
+      audit.info(`Diff-scope: "${opts.since}" referansından bu yana ${scope.paths.size} dosya kapsamda.`);
+      if (scope.paths.size === 0) {
+        audit.warn("Diff-scope kapsamı boş — değişen dosya yok, bulgu üretilmeyecek.");
+      }
+    } else {
+      // Sessizce tam taramaya düşmek, kullanıcının "hızlı kısmi tarama" beklentisini
+      // sessizce yavaş tam taramaya çevirirdi; tersi (kapsam yok sanıp eksik tarama) daha da
+      // kötü olurdu. Bu yüzden gürültülü uyar ve TAM kapsamla devam et.
+      audit.warn(`${r.error} Kapsam daraltılmadı; TAM tarama yapılıyor.`);
+    }
+  }
+
+  const fs = createFsContext(opts.projectRoot, scope?.paths);
   const ctx: ScanContext = { projectRoot: opts.projectRoot, authz, audit, stack, fs };
 
   // 3) Modülleri koş.
@@ -176,9 +207,33 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
     startedAt,
     finishedAt,
     wardenVersion: WARDEN_VERSION,
+    scope: scope ? { since: scope.since, fileCount: scope.paths.size } : undefined,
   });
   audit.info(`Rapor yazıldı: ${paths.dir}`);
+  if (scope) {
+    audit.info("Kısmi tarama: findings.json ve history.jsonl bilerek güncellenmedi (tam postür kaydı korunur).");
+  }
 
-  const delta = computeDelta(previous, active);
-  return { mode, authz, findings: active, waived, ranModules, artifacts, delta, paths, startedAt, finishedAt };
+  /*
+   * Kısmi taramada delta HESAPLANMAZ.
+   *
+   * `previous` tam bir taramanın kaydı; bu çalışma ise dosyaların bir alt kümesini gördü.
+   * İkisini karşılaştırmak, taranmamış dosyalardaki her bulguyu "düzeltildi" diye raporlardı —
+   * bir güvenlik aracının üretebileceği en tehlikeli yanlış sinyal. Boş delta, yanlış delta'dan
+   * iyidir.
+   */
+  const delta = scope ? computeDelta(null, active) : computeDelta(previous, active);
+  return {
+    mode,
+    authz,
+    findings: active,
+    waived,
+    ranModules,
+    artifacts,
+    delta,
+    paths,
+    startedAt,
+    finishedAt,
+    scope: scope ? { since: scope.since, fileCount: scope.paths.size } : null,
+  };
 }

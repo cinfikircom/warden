@@ -35,6 +35,8 @@ interface Parsed {
   noPanel: boolean;
   /** `init` komutu: paneli kopyala ama başlatma/tarayıcıyı açma. */
   noLaunch: boolean;
+  /** --since <git-ref> — taramayı bu referanstan bu yana değişen dosyalarla sınırla (diff-scope). */
+  since: string | null;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -55,6 +57,7 @@ function parseArgs(argv: readonly string[]): Parsed {
   let fingerprint: readonly string[] | null = null;
   let noPanel = false;
   let noLaunch = false;
+  let since: string | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--target" || a === "-t") {
@@ -75,12 +78,28 @@ function parseArgs(argv: readonly string[]): Parsed {
       severity = vs.filter((v): v is Severity => (SEVERITIES as readonly string[]).includes(v));
     } else if (a === "--fingerprint") {
       fingerprint = (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    } else if (a === "--since") {
+      const v = args[++i];
+      if (v) since = v;
     } else if (a === "--no-panel") noPanel = true;
     else if (a === "--no-launch") noLaunch = true;
     else if (a === "--help" || a === "-h") help = true;
     else if (a === "--version" || a === "-v") version = true;
   }
-  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint, noPanel, noLaunch };
+  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint, noPanel, noLaunch, since };
+}
+
+/**
+ * `--since` verildi ama kapsam çözülemediyse (git deposu değil, ref yok) tarama TAM kapsamla
+ * sürer. Bunu yalnızca audit log'a yazmak yetmez: kullanıcı hızlı bir kısmi tarama beklerken
+ * tam tarama aldığını terminalde görmeli.
+ */
+function warnIfScopeDropped(since: string | null, res: ScanResult): void {
+  if (since && !res.scope) {
+    process.stderr.write(
+      `⚠ --since "${since}" çözülemedi (git deposu değil veya referans yok) — TAM tarama yapıldı.\n`,
+    );
+  }
 }
 
 /** CI gate: eşik şiddetinde/üstünde bulgu varsa true (çıkış kodu 1). */
@@ -105,9 +124,19 @@ function resolveModules(ids: readonly ModuleId[] | null): WardenModule[] | undef
 }
 
 /** exactOptionalPropertyTypes altında `modules: undefined` geçmemek için: yalnızca varsa ekle. */
-function scanOptionsFor(target: string, intent: "scan" | "pentest", moduleIds: readonly ModuleId[] | null) {
+function scanOptionsFor(
+  target: string,
+  intent: "scan" | "pentest",
+  moduleIds: readonly ModuleId[] | null,
+  since: string | null = null,
+) {
   const modules = resolveModules(moduleIds);
-  return modules ? { projectRoot: target, intent, modules } : { projectRoot: target, intent };
+  return {
+    projectRoot: target,
+    intent,
+    ...(modules ? { modules } : {}),
+    ...(since ? { since } : {}),
+  };
 }
 
 const HELP = `Warden ${WARDEN_VERSION} — production-readiness & güvenlik denetimi (savunma amaçlı)
@@ -133,6 +162,11 @@ Seçenekler:
   --module <liste>     scan/pentest/report/monitor: yalnızca verilen modül(ler) (virgülle, ör. B,CLOUD).
                         ⚠ Diğer tüm modüllerin skorunu "n/d" yapar — tek-boyut CI kapısı içindir,
                         tam postür/delta için --module KULLANMA.
+  --since <git-ref>    scan/pentest: taramayı bu referanstan bu yana DEĞİŞEN dosyalarla sınırla
+                        (ör. --since origin/main, --since HEAD~1). Commit edilmemiş düzenlemeler
+                        ve yeni (untracked) dosyalar da kapsama girer. PR/CI için hızlıdır.
+                        ⚠ KISMİ sonuç: tam postür değildir. findings.json ve history.jsonl
+                        güncellenmez, delta hesaplanmaz — tam postür kaydı korunur.
   --no-panel           init: security-knight panelini hiç kopyalama (yalnızca skill kurulur).
   --no-launch          init: paneli kopyala ama başlatma/tarayıcıyı açma (ör. CI/otomasyon).
 
@@ -149,6 +183,16 @@ function printSummary(res: ScanResult): void {
   for (const f of res.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
   process.stdout.write(`Mod: ${res.mode.toUpperCase()}\n`);
   for (const r of res.authz.reasons) process.stdout.write(`  • ${r}\n`);
+  // Kısmi tarama uyarısı bulgu sayısından ÖNCE: "toplam 0 bulgu" satırını tam postür
+  // sanmak, bu akıştaki en pahalı yanlış anlama olurdu.
+  if (res.scope) {
+    process.stdout.write(
+      `\n⚠ KISMİ TARAMA — yalnızca "${res.scope.since}" referansından bu yana değişen ` +
+        `${res.scope.fileCount} dosya tarandı.\n` +
+        `  Tam postür DEĞİLDİR; kapsam dışında bulgu yok anlamına gelmez.\n` +
+        `  findings.json / history.jsonl bilerek güncellenmedi (tam postür kaydı korunur).\n`,
+    );
+  }
   process.stdout.write(
     `\nBulgu: toplam ${res.findings.length} ` +
       `(P0:${counts.P0} P1:${counts.P1} P2:${counts.P2} P3:${counts.P3})\n`,
@@ -179,7 +223,10 @@ function printSummary(res: ScanResult): void {
     }
   }
 
-  if (res.delta && !res.delta.isFirstRun) {
+  if (res.scope) {
+    // Kısmi kapsamda delta anlamsız: taranmayan dosyalardaki bulgular "düzeltildi" görünürdü.
+    process.stdout.write(`\nDeğişim: kısmi tarama — delta hesaplanmadı.\n`);
+  } else if (res.delta && !res.delta.isFirstRun) {
     process.stdout.write(
       `\nDeğişim: ✅ düzeltilen ${res.delta.fixed.length} · 🆕 yeni ${res.delta.introduced.length} · ⏳ kalan ${res.delta.persisting.length}\n`,
     );
@@ -226,7 +273,8 @@ async function main(): Promise<number> {
       return 0;
     }
     case "scan": {
-      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
+      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules, p.since));
+      warnIfScopeDropped(p.since, res);
       printSummary(res);
       return gateExit(res, p.failOn);
     }
@@ -237,17 +285,22 @@ async function main(): Promise<number> {
         for (const r of authz.reasons) process.stdout.write(`  • ${r}\n`);
         process.stdout.write("\n");
       }
-      const res = await runScan(scanOptionsFor(p.target, "pentest", p.modules));
+      const res = await runScan(scanOptionsFor(p.target, "pentest", p.modules, p.since));
+      warnIfScopeDropped(p.since, res);
       printSummary(res);
       return gateExit(res, p.failOn);
     }
     case "report": {
+      if (p.since) process.stderr.write("⚠ --since yalnızca scan/pentest ile geçerli; report tam tarama yapar.\n");
       const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
       printSummary(res);
       return gateExit(res, p.failOn);
     }
     case "monitor": {
       // Continuous monitoring: periyodik pasif tarama + öncesi/sonrası delta.
+      // --since burada bilerek desteklenmez: kısmi tarama delta/trend üretmez (bkz.
+      // orchestrator'daki delta koruması), monitor'ün tek işi ise tam da trend izlemektir.
+      if (p.since) process.stderr.write("⚠ --since monitor ile geçerli değil; trend tam tarama gerektirir.\n");
       let tick = 0;
       for (;;) {
         tick++;

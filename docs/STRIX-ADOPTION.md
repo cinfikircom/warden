@@ -204,12 +204,43 @@ Sıra risk-artan ve fingerprint-nötr işleri öne alacak biçimde kuruldu.
 
 | # | İş | Fingerprint etkisi | Risk | Durum |
 |---|-----|:---:|:---:|:---:|
-| 0 | v0.10 turunu commit'le (583 satır commit'siz duruyor) | yok | yok | 🔨 |
-| 1 | `detect/fs.ts` `maxDepth` kör noktası (13 modülü etkiliyor) | **yeni bulgu dalgası** | orta | ⏳ |
-| 2 | Diff-scope tarama (`--since`) — §1.1 | yok | düşük | ⏳ |
+| 0 | v0.10 turunu commit'le (583 satır commit'siz duruyor) | yok | yok | ✅ |
+| 1 | `detect/fs.ts` `maxDepth` kör noktası (13 modülü etkiliyor) | **yeni bulgu dalgası** | orta | ✅ |
+| 1b | Waiver `path` selector'ı + Warden self-match'leri | yok | düşük | ✅ |
+| 2 | Diff-scope tarama (`--since`) — §1.1 | yok | düşük | ✅ |
 | 3 | Taint katmanı (dosya-içi) — §1.2 + §1.5 | yok (yalnız `confidence`) | orta | ⏳ |
 | 4 | Opsiyonel TypeScript AST — §1.3 | yok | orta | ⏳ |
 | 5 | Rule Packs — §1.4 | yeni kural = yeni bulgu | düşük | ⏳ |
+
+### Sıra 1'in ortaya çıkardıkları (kayıt)
+
+`maxDepth` 4→6 tek başına bir performans ayarı sanılıyordu; iki gizli kusuru açığa çıkardı:
+
+- **Yedi modül hiç çalışmıyormuş.** Bu repoda çalışan modül sayısı 9 → 16. CLOUD, K8S, PAY,
+  WEB, FLOW, EMAIL ve UPLOAD modüllerinin `applicable()` kontrolleri derin dosyaları
+  göremediği için sessizce atlanıyorlardı. Rapor bunu "modül uygulanabilir değil" diye
+  gösteriyordu — yani eksik denetim, tam denetim gibi görünüyordu.
+- **Test fixture'ları gerçek altyapı sanılıyordu.** Derinlik açılınca CLOUD/K8S/parity,
+  `test/fixtures/vuln-*` altındaki kasıtlı zafiyetli örneklerden 13 bulgu (4'ü P0) üretti.
+  Sebep: "test/fixture gerçek değildir" bilgisinin dört ayrı yerde farklı biçimde durması.
+  `util/paths.ts` artık tek kaynak.
+
+Sonuç: self-scan 46 bulgudan (13 fixture FP + 26 self-match) **7 gerçek bulguya** indi.
+
+### Sıra 2'nin tasarım kararı (kayıt)
+
+Diff-scope'ta en kolay hata, kısmi sonucu tam postür kaydıyla karıştırmaktı. Alınan önlemler:
+
+- `find()` daraltılır, **`exists()`/`readFile()` daraltılmaz**. Modüllerin çoğu bir korumanın
+  *varlığını* yokluyor ("helmet kurulu mu"); onları da daraltmak, kapsam dışında kaldığı için
+  görülemeyen her korumayı "yok" saydırır ve kısmi taramayı bir yokluk-temelli FP fabrikasına
+  çevirirdi. Daralan şey "neyi tarıyoruz", "proje neye sahip" değil.
+- `findings.json` ve `history.jsonl` kısmi çalışmada **yazılmaz**. İkisi de "bu projenin bilinen
+  tüm bulguları" anlamı taşır; kısmi sonucu oraya yazmak, taranmayan dosyalardaki bulguları bir
+  sonraki çalışmada "yeni", bu çalışmada "düzeltildi" gösterirdi.
+- **Delta hesaplanmaz.** Boş delta, yanlış delta'dan iyidir.
+- Kapsam çözülemezse (git yok, ref yok) **tam taramaya düşülür ve gürültülü uyarılır** —
+  sessizce eksik tarama yapmaktansa beklenenden yavaş çalışmak yeğdir.
 
 **Sıra 1 hakkında uyarı:** `maxDepth` varsayılanı 4→6 çıkarmak Strix işi değil, mevcut sistemin
 kendi borcu. Ama monorepo'larda (`apps/web/src/components/ui/X.tsx` = 5 seviye) **tüm modüller**

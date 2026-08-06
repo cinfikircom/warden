@@ -30,6 +30,11 @@ export interface ReportMeta {
   readonly previous?: PreviousRun | null;
   /** Risk motorunun ürettiği ek checklist'ler (ASVS, CIS, ISO 27001). */
   readonly extraChecklists?: readonly Checklist[];
+  /**
+   * Diff-scope taramasında kapsam bilgisi (`--since <ref>`). Verildiğinde bu çalışma KISMİDİR:
+   * yalnızca değişen dosyalar tarandı, dolayısıyla bulgu listesi tam postürü temsil etmez.
+   */
+  readonly scope?: { readonly since: string; readonly fileCount: number } | undefined;
 }
 
 export interface ReportPaths {
@@ -133,6 +138,25 @@ function renderReportMd(findings: readonly Finding[], meta: ReportMeta): string 
   lines.push("> ⛔ **Güvenlik ilkeleri:** Varsayılan read-only. Aktif testler yalnızca yetki kapısı");
   lines.push("> (`warden.authz.yml`) açıkken, allow-list host'lara, rate-limited çalışır. Secret'lar maskelidir.");
   lines.push("");
+
+  // Kısmi tarama uyarısı EN ÜSTTE: bu raporu tam postür sanmak, kapsam dışında kalan
+  // bulguları "yok" sanmak demektir — bir denetim raporunda en pahalı yanlış anlama budur.
+  if (meta.scope) {
+    lines.push(
+      `> ⚠️ **KISMİ TARAMA** — yalnızca \`${meta.scope.since}\` referansından bu yana değişen ` +
+        `${meta.scope.fileCount} dosya tarandı. Bu rapor projenin TAM güvenlik postürü DEĞİLDİR;` ,
+    );
+    lines.push(
+      "> kapsam dışındaki dosyalarda bulgu olmadığı anlamına gelmez. Tam postür ve delta/trend " +
+        "kaydı için `--since` olmadan `warden scan` çalıştırın.",
+    );
+    lines.push("");
+    lines.push(
+      "> _Bu çalışma `findings.json` ve `history.jsonl`'i bilerek güncellemedi: kalıcı postür " +
+        "kaydı en son tam taramanınki olarak korunur._",
+    );
+    lines.push("");
+  }
 
   lines.push("## Yönetici Özeti");
   lines.push("");
@@ -306,11 +330,26 @@ export function writeReport(findings: readonly Finding[], meta: ReportMeta): Rep
   const paths = reportPaths(meta.projectRoot);
   mkdirSync(paths.dir, { recursive: true });
   writeFileSync(paths.reportMd, renderReportMd(findings, meta), "utf8");
-  writeFileSync(paths.findingsJson, renderFindingsJson(findings, meta), "utf8");
   writeFileSync(paths.remediationMd, renderRemediationMd(findings, meta), "utf8");
   writeFileSync(paths.parityMd, renderParityMd(findings, meta), "utf8");
   writeFileSync(paths.complianceMd, renderComplianceMd(meta), "utf8");
   writeFileSync(paths.sarif, toSarif(findings, meta.wardenVersion), "utf8");
+
+  /*
+   * KISMİ (diff-scope) tarama, tam postür kayıtlarına DOKUNMAZ.
+   *
+   * `findings.json` ve `history.jsonl` "bu projenin bilinen tüm bulguları" anlamını taşır:
+   * findings.json bir sonraki çalışmanın delta tabanıdır, history.jsonl trend serisidir.
+   * Kısmi bir sonucu oraya yazmak iki yönlü bozardı — taranmayan dosyalardaki bulgular bir
+   * sonraki çalışmada "yeni" görünür, bu çalışmada ise "düzeltildi" sayılırdı. Trend grafiği
+   * de kapsamı değişen noktalarda sahte sıçrama gösterirdi.
+   *
+   * Bu yüzden kısmi çalışma yalnızca insan-okur raporları ve SARIF'i tazeler (CI anotasyonu
+   * için gereken de budur); kalıcı postür kaydı en son TAM taramanınki olarak kalır.
+   */
+  if (meta.scope) return paths;
+
+  writeFileSync(paths.findingsJson, renderFindingsJson(findings, meta), "utf8");
 
   // history.jsonl — trend için her çalışmadan tek satır.
   const rows = buildScoreboard(findings, meta.ranModules);
