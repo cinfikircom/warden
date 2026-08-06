@@ -2,6 +2,7 @@ import type { Finding, Evidence } from "../../model/finding.ts";
 import type { ParityLayer } from "../../model/parity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { TEST_PATH } from "../../util/paths.ts";
 
 export interface MigrationFile {
   readonly path: string;
@@ -40,7 +41,7 @@ export function collectPrismaData(ctx: DetectContext): PrismaData {
     : (ctx.find((p) => p.endsWith("schema.prisma"), { limit: 1 })[0] ?? null);
   const schemaText = schemaPath ? ctx.readFile(schemaPath) : null;
 
-  const migPaths = ctx.find((p) => /prisma\/migrations\/.+\/migration\.sql$/.test(p), { limit: 1000 });
+  const migPaths = ctx.find((p) => !TEST_PATH.test(p) && /prisma\/migrations\/.+\/migration\.sql$/.test(p), { limit: 1000 });
   const migrations: MigrationFile[] = [];
   for (const p of migPaths) {
     const sql = ctx.readFile(p);

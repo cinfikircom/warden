@@ -2,6 +2,7 @@ import type { Finding, Evidence } from "../../model/finding.ts";
 import type { ParityLayer } from "../../model/parity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { TEST_PATH } from "../../util/paths.ts";
 
 export interface MigrationFile {
   readonly path: string;
@@ -15,7 +16,10 @@ const DESTRUCTIVE = [
 
 export function collectDotnetData(ctx: DetectContext): MigrationFile[] {
   // EF Core migration'ları genelde Migrations/*.cs ve *Migration*.cs içinde Up(MigrationBuilder ...).
-  const paths = ctx.find((p) => /(^|\/)Migrations\/[^/]+\.cs$/i.test(p) || /Migration.*\.cs$/.test(p), { limit: 1000 });
+  const paths = ctx.find(
+    (p) => !TEST_PATH.test(p) && (/(^|\/)Migrations\/[^/]+\.cs$/i.test(p) || /Migration.*\.cs$/.test(p)),
+    { limit: 1000 },
+  );
   const out: MigrationFile[] = [];
   for (const p of paths) {
     const content = ctx.readFile(p);

@@ -2,6 +2,7 @@ import type { Finding, Evidence } from "../../model/finding.ts";
 import type { ParityLayer } from "../../model/parity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { TEST_PATH } from "../../util/paths.ts";
 
 /** Django migration dosyası. */
 export interface DjangoMigration {
@@ -17,7 +18,10 @@ const DESTRUCTIVE = [
 ];
 
 export function collectDjangoData(ctx: DetectContext): DjangoMigration[] {
-  const paths = ctx.find((p) => /(^|\/)migrations\/[^/]+\.py$/.test(p) && !p.endsWith("__init__.py"), { limit: 1000 });
+  const paths = ctx.find(
+    (p) => !TEST_PATH.test(p) && /(^|\/)migrations\/[^/]+\.py$/.test(p) && !p.endsWith("__init__.py"),
+    { limit: 1000 },
+  );
   const out: DjangoMigration[] = [];
   for (const p of paths) {
     const content = ctx.readFile(p);

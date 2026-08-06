@@ -3,6 +3,7 @@ import type { Severity } from "../../model/severity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
 import { maskSecrets } from "../../secret/mask.ts";
+import { VENDOR_PATH, TEST_PATH, MINIFIED_PATH } from "../../util/paths.ts";
 
 /**
  * Bildirimsel kaynak kuralı. SAST kontrollerinin çoğu (B1/B3/B4/B6/FE) bununla ifade edilir;
@@ -38,8 +39,17 @@ export interface SourceRule {
 
 /** Varsayılan kod dosyası deseni. Modüller kendi `include`'unu geçerek genişletebilir (ör. FE: .html). */
 export const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|astro|py|go|php|rb|java|cs)$/i;
-export const SKIP_PATH =
-  /(^|\/)(node_modules|dist|build|\.next|coverage|warden-report|vendor)\/|\.min\.js$|\.(test|spec)\.[a-z]+$|(^|\/)(test|tests|__tests__|fixtures)\//i;
+
+/**
+ * SAST'ın atlama deseni. Artık `util/paths.ts`'teki ORTAK parçalardan türetilir — aynı bilgi
+ * (vendor / test-fixture / minified) CLOUD, K8S ve parity modüllerinde de kullanılsın diye.
+ * Davranış eskisiyle birebir aynı: tek genişleme `.min.css`, ve hiçbir modül `.css` taramadığı
+ * için o dal ölü.
+ */
+export const SKIP_PATH = new RegExp(
+  [VENDOR_PATH.source, MINIFIED_PATH.source, TEST_PATH.source].join("|"),
+  "i",
+);
 
 export interface ScanSourceOptions {
   readonly maxFiles?: number;

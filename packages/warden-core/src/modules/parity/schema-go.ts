@@ -2,6 +2,7 @@ import type { Finding, Evidence } from "../../model/finding.ts";
 import type { ParityLayer } from "../../model/parity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { TEST_PATH } from "../../util/paths.ts";
 
 /**
  * A2 (Go) — golang-migrate / goose tarzı SQL migration'larda yıkıcı operasyon tespiti.
@@ -22,7 +23,9 @@ const DESTRUCTIVE = [
 
 export function collectGoMigrations(ctx: DetectContext): MigrationFile[] {
   const paths = ctx.find(
-    (p) => /(^|\/)(migrations|migration|db\/migrations|sql\/migrations)\/[^/]+\.sql$/i.test(p) || /\.up\.sql$/i.test(p),
+    (p) =>
+      !TEST_PATH.test(p) &&
+      (/(^|\/)(migrations|migration|db\/migrations|sql\/migrations)\/[^/]+\.sql$/i.test(p) || /\.up\.sql$/i.test(p)),
     { limit: 1000 },
   );
   const out: MigrationFile[] = [];

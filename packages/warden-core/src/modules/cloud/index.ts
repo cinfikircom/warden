@@ -3,6 +3,7 @@ import type { Finding } from "../../model/finding.ts";
 import type { Severity } from "../../model/severity.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { VENDOR_PATH, TEST_PATH } from "../../util/paths.ts";
 
 /**
  * Modül CLOUD — Cloud/IaC güvenliği (pasif, statik; Terraform odaklı).
@@ -74,7 +75,12 @@ const RULES: readonly CloudRule[] = [
 ];
 
 const IAC_FILE = /\.(tf|tf\.json|hcl)$/i;
-const SKIP = /(^|\/)(node_modules|dist|build|warden-report|vendor|\.terraform)\//;
+/**
+ * Ortak vendor/test filtresi + Terraform'a özgü `.terraform/` (indirilmiş provider/modül önbelleği).
+ * TEST_PATH şart: `test/fixtures/vuln-iac/main.tf` gibi KASITLI zafiyetli fixture'lar gerçek
+ * altyapı değildir; onlara P0 vermek raporun tamamının güvenilirliğini düşürür.
+ */
+const SKIP = new RegExp([VENDOR_PATH.source, TEST_PATH.source, /(^|\/)\.terraform\//.source].join("|"), "i");
 
 export function analyzeCloud(files: ReadonlyArray<{ path: string; content: string }>): Finding[] {
   const findings: Finding[] = [];

@@ -23,6 +23,21 @@ const IGNORE_DIRS = new Set([
  */
 const ALLOW_DOT_DIRS = new Set([".github", ".circleci", ".gitlab"]);
 
+/**
+ * Varsayılan dizin derinliği sınırı.
+ *
+ * 4'tü ve TÜM modülleri etkileyen sessiz bir kör noktaydı: derinlik `walk(root, 0)`'dan
+ * sayıldığı için `packages/<pkg>/src/modules/<mod>/x.ts` (= 5) hiç taranmıyordu. Yani Warden
+ * kendi `src/modules/` ağacını bile göremiyordu; yalnızca FE modülü yerel olarak 6 geçtiği
+ * için oradan bulgu üretebiliyordu.
+ *
+ * 6, yaygın monorepo yerleşimlerini kapsar (`apps/web/src/components/ui/X.tsx`,
+ * `packages/<pkg>/src/<katman>/<alan>/x.ts`). Sınırın asıl amacı patolojik ağaçlara karşı
+ * korumaydı; onu zaten `limit` yapıyor (bkz. aşağıdaki `out.length >= limit` kesmesi) ve
+ * `IGNORE_DIRS` en büyük alt ağaçları (node_modules/dist/.next…) baştan eliyor.
+ */
+export const DEFAULT_MAX_DEPTH = 6;
+
 /** READ-ONLY dosya bağlamı — dedektörler ve modüller bunu kullanır. */
 export function createFsContext(projectRoot: string): DetectContext {
   const readFile = (relPath: string): string | null => {
@@ -35,7 +50,7 @@ export function createFsContext(projectRoot: string): DetectContext {
   const exists = (relPath: string): boolean => existsSync(join(projectRoot, relPath));
 
   const find: DetectContext["find"] = (predicate, opts) => {
-    const maxDepth = opts?.maxDepth ?? 4;
+    const maxDepth = opts?.maxDepth ?? DEFAULT_MAX_DEPTH;
     const limit = opts?.limit ?? 2000;
     const out: string[] = [];
 

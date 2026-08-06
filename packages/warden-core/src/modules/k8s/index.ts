@@ -3,6 +3,7 @@ import type { WardenModule, ScanContext, ModuleRunResult } from "../../model/mod
 import type { Finding } from "../../model/finding.ts";
 import type { DetectContext } from "../../detect/types.ts";
 import { makeFinding } from "../../util/finding.ts";
+import { VENDOR_PATH, TEST_PATH } from "../../util/paths.ts";
 
 /**
  * Modül K8S — Kubernetes manifest güvenliği (pasif, statik).
@@ -106,7 +107,11 @@ function mk(path: string, id: string, check: string, title: string, severity: "P
 }
 
 const YAML_FILE = /\.ya?ml$/i;
-const SKIP = /(^|\/)(node_modules|dist|build|warden-report|vendor)\//;
+/**
+ * Ortak vendor/test filtresi. TEST_PATH şart: `test/fixtures/vuln-k8s/deployment.yaml` gibi
+ * kasıtlı zafiyetli manifest'ler regresyon fixture'ıdır, dağıtılan iş yükü değil.
+ */
+const SKIP = new RegExp([VENDOR_PATH.source, TEST_PATH.source].join("|"), "i");
 
 export function collectK8sDocs(ctx: DetectContext): K8sDoc[] {
   const files = ctx.find((p) => YAML_FILE.test(p) && !SKIP.test(p), { limit: 2000 });
