@@ -120,7 +120,9 @@ Frontend / AI Security genişletmeleri) ID, şiddet, faz ve durumu için bkz. [`
 
 - **GCP cloud + Go adaptörü + CIS/ISO eşleştirme** ✅ — GCP (public bucket / Cloud SQL public / firewall 0.0.0.0/0), Go (golang-migrate yıkıcı migration + Go SAST + go.mod deps), **CIS Benchmark** ve **ISO 27001:2022 Annex A** checklist'leri (bulgulardan türetilir, ✖/–).
 
-112 test geçiyor; 10 stack/senaryo fixture (Node/Prisma, Django, Laravel, .NET, Go, K8s, Terraform-AWS, Terraform-GCP, AI + DAST).
+- **Strix yetenek devralma turu** ✅ — dosya-içi **taint/veri-akışı** analizi (bağlam körlüğü: sabit stringle çağrılan `exec` ile kullanıcı girdisi taşıyan `exec` artık ayrışıyor), **diff-scope tarama** (`--since <git-ref>`), waiver **`path` selector'ı**, `ctx.find()` derinlik kör noktasının kapatılması ve test/fixture yollarının tek kaynaktan elenmesi. Alınmayanlar ve gerekçeleri: [`docs/STRIX-ADOPTION.md`](STRIX-ADOPTION.md).
+
+388 test geçiyor; 12 stack/senaryo fixture (Node/Prisma, Django, Laravel, .NET, Go, K8s, Terraform-AWS, Terraform-GCP, AI + DAST).
 
 ## GitHub Action (SARIF upload + CI gate)
 

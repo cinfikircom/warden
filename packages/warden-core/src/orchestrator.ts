@@ -23,9 +23,14 @@ import { detectStack, defaultDetectors } from "./detect/registry.ts";
 import type { StackDetector } from "./detect/types.ts";
 import { defaultModules } from "./registry.ts";
 
-// 0.10.0 — Modül FE ayrıldı, Modül E boyut olmaktan çıkıp OWASP uyum checklist'ine dönüştü,
-// E3/E8/E10 check kodları B6/B8'e normalize edildi (fingerprint/waiver etkisi için CHECKS.md).
-export const WARDEN_VERSION = "0.10.0";
+// 0.11.0 — Strix yetenek devralma turu: dosya-içi taint/veri-akışı, diff-scope tarama
+// (--since), waiver `path` selector'ı. Ayrıca ctx.find() derinlik kör noktası (varsayılan
+// 4→6) kapatıldı ve test/fixture eleme tek kaynağa (util/paths.ts) toplandı.
+//
+// ⚠ Derinlik değişikliği kullanıcı-görünür: daha önce hiç taranmamış derin dosyalar ilk kez
+// görülür. Bu fingerprint kayması DEĞİL, gerçek yeni bulgudur. Devralma kararları ve
+// alınmayanların gerekçeleri: docs/STRIX-ADOPTION.md
+export const WARDEN_VERSION = "0.11.0";
 
 /** Önceki findings.json'ı PreviousRun'a çevirir. Yoksa/bozuksa null (ilk çalışma gibi davranır). */
 function loadPreviousRun(findingsJsonPath: string): PreviousRun | null {

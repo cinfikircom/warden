@@ -350,3 +350,6 @@ söz bastırmasın) ve düşük güvenle işaretlenir.
 | **Reachability (import-seviyesi)** | Zafiyetli bağımlılık kaynak import grafında mı; değilse (olası transitif) öncelik düşürülür (KEV hariç). Tam çağrı-grafı değil | 6 | ✅ |
 | **Native araç runner'ları** | `WARDEN_TOOLS=all\|opengrep,semgrep,trivy,gitleaks,checkov` kuruluysa doğrudan çalıştırır → SARIF normalize; **nuclei** yetki-kapılı (DAST, non-destructive etiketler). Kurulu değilse graceful atlar. OSV native runner ✅ | 2/4 | ✅ |
 | **İçe-aktarım modül ataması** | SARIF bulguları araç adından modüle atanır (checkov→CLOUD, kubescape→K8S, nuclei/zap→C, semgrep/gitleaks/trivy→B); scoreboard boyutları buna göre | 2 | ✅ |
+| **Taint / veri-akışı (dosya-içi)** | Kaynak (`req.body`, `location.hash`, `process.argv`…) → sink akışı izlenir; girdi ulaşıyorsa güven YÜKSELİR, temizlenmişse düşer, **bulunamazsa hiç dokunulmaz** (asimetrik: motorun negatif kararı güvenilir değil). 23 sink kuralı. Fonksiyonlar/dosyalar arası akış izlenmez | + | ✅ |
+| **Diff-scope tarama** | `--since <git-ref>`: yalnızca değişen dosyalar (commit'siz düzenlemeler + untracked dahil). Kısmi sonuç `findings.json`/`history.jsonl`'e YAZILMAZ, delta hesaplanmaz | + | ✅ |
+| **Waiver `path` selector'ı** | Yol glob'u (`*` / `**` / `?`) ile bastırma; bulgu ancak TÜM kanıtları glob'a uyarsa waive edilir, çıplak `**` reddedilir | + | ✅ |
