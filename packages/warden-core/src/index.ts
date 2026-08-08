@@ -11,8 +11,11 @@ export { AuditLog } from "./audit/log.ts";
 
 export { reportPaths, writeReport } from "./report/generator.ts";
 export type { ReportMeta, ReportPaths } from "./report/generator.ts";
+export { cweFor, enrichCwe, FORBIDDEN_PARENTS } from "./risk/cwe.ts";
 export { buildScoreboard, overallScore, DIMENSIONS } from "./report/scoreboard.ts";
 export type { ScoreRow } from "./report/scoreboard.ts";
+export { CoverageCollector } from "./report/coverage.ts";
+export type { CoverageManifest, ModuleCoverage, ModuleStatus, LimitHit, LimitKind } from "./report/coverage.ts";
 export { toSarif } from "./report/sarif.ts";
 export { computeDelta, renderDeltaSection } from "./report/delta.ts";
 export type { Delta, PreviousRun } from "./report/delta.ts";
@@ -53,6 +56,9 @@ export { sastModule } from "./modules/sast/index.ts";
 export { scanSource } from "./modules/sast/scanner.ts";
 export type { SourceRule } from "./modules/sast/scanner.ts";
 export { SAST_RULES } from "./modules/sast/rules.ts";
+export { loadRulePacks, RULE_PACK_DIR } from "./modules/sast/rule-packs.ts";
+export type { RulePackLoad } from "./modules/sast/rule-packs.ts";
+export { fpHintsFor } from "./risk/false-positives.ts";
 export { parseAudit, vulnsToFindings } from "./modules/sast/dependency.ts";
 
 export { k8sModule, analyzeK8s, collectK8sDocs } from "./modules/k8s/index.ts";

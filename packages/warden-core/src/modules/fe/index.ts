@@ -146,10 +146,24 @@ function detectSurface(fs: DetectContext): boolean {
   // Framework yoksa da tarayıcı kodu olabilir: script içeren bir HTML sayfası da frontend'dir.
   // (Aksi halde vanilla ES-module panelleri Modül FE'ye tamamen görünmez kalırdı.)
   for (const p of fs.find((p) => FE_HTML.test(p) && !FE_SKIP.test(p), { limit: 20, maxDepth: 6 })) {
-    if (HTML_HAS_SCRIPT.test(fs.readFile(p) ?? "")) return true;
+    const html = fs.readFile(p) ?? "";
+    if (HTML_HAS_SCRIPT.test(html)) return true;
+    // SUNUCU-TARAFI ŞABLON da frontend yüzeyidir: çıktısı tarayıcıda HTML olarak çalışır ve
+    // motorun kaçışı kapalıysa her interpolasyon bir XSS sink'idir (FE-8).
+    //
+    // Bu koşul olmadan Express+Swig/Nunjucks/EJS gibi klasik sunucu-render uygulamaları
+    // Modül FE'ye tamamen görünmez kalıyordu — script etiketi barındırmayan bir şablon
+    // "frontend değil" sayıldığı için. Tam da XSS'in en yoğun olduğu uygulama sınıfı.
+    if (TEMPLATE_INTERP.test(html)) return true;
   }
-  return false;
+  // Belirgin şablon uzantıları tek başına yeterli sinyaldir.
+  return fs.find((p) => SERVER_TEMPLATE_EXT.test(p) && !FE_SKIP.test(p), { limit: 1, maxDepth: 6 }).length > 0;
 }
+
+/** Sunucu şablonu interpolasyonu — `{{ x }}`, `{% if %}`, `<%= x %>`. */
+const TEMPLATE_INTERP = /\{\{[^{}]{1,200}\}\}|\{%[^%]{1,200}%\}|<%[=-][^%]{1,200}%>/;
+/** Sunucu-tarafı şablon motoru uzantıları. */
+const SERVER_TEMPLATE_EXT = /\.(njk|swig|twig|hbs|handlebars|ejs|liquid|jinja2?)$/i;
 
 /** Pencere analizi için ham dosya içerikleri. */
 export function collectFeData(fs: DetectContext): FeData {
@@ -167,6 +181,154 @@ export function collectFeData(fs: DetectContext): FeData {
 // ---- KATMAN 3: saf analiz (pencere kuralları) ---------------------------
 
 type Push = (f: Finding) => void;
+
+/* ─── FE-8: sunucu-tarafı şablon motoru kaçış güvenliği ─────────────────────
+ *
+ * Warden'ın tamamen kör olduğu bir katmandı. FE-3 istemci-tarafı DOM sink'lerini
+ * (`innerHTML`, `v-html`, `dangerouslySetInnerHTML`) biliyordu; ama Swig/Nunjucks/EJS/
+ * Handlebars gibi SUNUCU şablonlarında XSS bambaşka bir yerden gelir: motorun otomatik
+ * HTML kaçışı kapatılmışsa, şablondaki HER `{{ }}` ham çıktıya dönüşür.
+ *
+ * Bu, tek satırlık bir kuralla yakalanamaz çünkü ilişki DOSYALAR ARASIDIR: kaçışı kapatan
+ * satır `server.js`'tedir, sonucu ise `views/*.html` içindedir. Bu yüzden analiz `analyzeFe`
+ * seviyesinde, tüm dosya kümesi üzerinde çalışır.
+ *
+ * (Boşluk NodeGoat benchmark'ında ölçülerek bulundu: 6 XSS maddesi bu yüzden kaçıyordu.)
+ */
+
+/** Motorun otomatik kaçışını kapatan yapılandırma. */
+const AUTOESCAPE_OFF =
+  /\b(autoescape\s*:\s*false|noEscape\s*:\s*true|escape\s*:\s*false|autoEscape\s*:\s*false)/;
+
+/** Kaçışın AÇIKÇA atlandığı çıktı biçimleri — autoescape ayarından bağımsız olarak risklidir. */
+const EXPLICIT_RAW = [
+  { re: /\{\{\{[^{}]+\}\}\}/g, why: "Handlebars üçlü süslü parantez ({{{ }}}) kaçış uygulamaz" },
+  { re: /\{\{[^{}]*\|\s*(safe|raw)\b[^{}]*\}\}/g, why: "`|safe` / `|raw` filtresi kaçışı devre dışı bırakır" },
+  { re: /<%-[^%]+%>/g, why: "EJS `<%- %>` etiketi kaçışsız çıktı verir" },
+  {
+    // Markdown/HTML üreten yardımcılar: çıktıları tanım gereği HTML'dir.
+    re: /\{\{\s*(marked|markdown|md|unescape|safeString|raw)\s*\([^)]*\)\s*\}\}/g,
+    why: "HTML üreten yardımcı (marked/markdown vb.) çıktısı kaçışsız basılıyor",
+  },
+] as const;
+
+/** URL taşıyan öznitelikte interpolasyon — `javascript:` yükü için doğrudan yol. */
+const URL_ATTR_INTERP = /\b(href|src|action|formaction|xlink:href)\s*=\s*["']?\{\{[^{}]+\}\}/gi;
+
+/** Şablon dosyası mı (interpolasyon aranacak yerler). */
+const TEMPLATE_FILE = /\.(html|htm|njk|swig|twig|hbs|handlebars|ejs|liquid|jinja2?)$/i;
+
+function checkTemplateEscaping(data: FeData, push: Push): void {
+  // 1) Kaçış kapatılmış mı? Yorum satırları elenir — NodeGoat'ta düzeltme (`autoescape: true`)
+  //    yorumda bekler, dolayısıyla yorumlu satırları saymak yanlış sonuç verirdi.
+  let escapingOff: { path: string; line: number; excerpt: string } | null = null;
+  for (const file of data.files) {
+    if (TEMPLATE_FILE.test(file.path)) continue; // yapılandırma kodda olur, şablonda değil
+    const code = blankComments(file.content);
+    const lineOf = lineIndexer(code);
+    const m = AUTOESCAPE_OFF.exec(code);
+    if (m) {
+      escapingOff = { path: file.path, line: lineOf(m.index), excerpt: excerptOf(m[0]) };
+      break;
+    }
+  }
+
+  if (escapingOff) {
+    push(
+      makeFinding({
+        id: `FE-template-autoescape-off:${escapingOff.path}:${escapingOff.line}`,
+        title: "Şablon motorunda otomatik HTML kaçışı kapalı",
+        severity: "P1",
+        module: "FE",
+        check: "FE-8",
+        category: "Cross-Site Scripting",
+        confidence: "high",
+        evidence: [
+          { type: "file", source: escapingOff.path, location: String(escapingOff.line), excerpt: escapingOff.excerpt },
+        ],
+        impact:
+          "Otomatik kaçış kapalıyken şablonlardaki HER değişken ham HTML olarak basılır; " +
+          "kullanıcıdan gelen tek bir alan tüm sayfalarda stored/reflected XSS'e dönüşür.",
+        recommendation:
+          "Otomatik kaçışı aç (Swig/Nunjucks `autoescape: true`, Handlebars `noEscape` kaldır). " +
+          "Gerçekten ham HTML gereken tek tek yerlerde açık filtre kullan ve girdiyi önce sanitize et (DOMPurify).",
+        effort: "M",
+        autoFixable: false,
+        references: ["OWASP A03:2021", "CWE-79", "ASVS 5.3"],
+      }),
+    );
+  }
+
+  // 2) Şablonlardaki riskli çıktılar.
+  for (const file of data.files) {
+    if (!TEMPLATE_FILE.test(file.path)) continue;
+    const code = blankHtmlComments(file.content);
+    const lineOf = lineIndexer(code);
+    let hits = 0;
+
+    for (const { re, why } of EXPLICIT_RAW) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(code)) !== null && hits < MAX_PER_FILE) {
+        hits++;
+        const line = lineOf(m.index);
+        push(
+          makeFinding({
+            id: `FE-template-raw-output:${file.path}:${line}`,
+            title: "Şablonda kaçışsız çıktı (stored/reflected XSS)",
+            severity: "P1",
+            module: "FE",
+            check: "FE-8",
+            category: "Cross-Site Scripting",
+            confidence: "medium",
+            evidence: [{ type: "file", source: file.path, location: String(line), excerpt: excerptOf(m[0]) }],
+            impact: `${why}. Değer kullanıcıdan geliyorsa sayfaya doğrudan script enjekte edilebilir.`,
+            recommendation:
+              "Kaçışlı çıktıya geç. Ham HTML zorunluysa değeri sunucuda bir allow-list sanitizer'dan " +
+              "(DOMPurify / sanitize-html) geçir ve yalnızca o alanı işaretle.",
+            effort: "M",
+            autoFixable: false,
+            references: ["OWASP A03:2021", "CWE-79", "ASVS 5.3"],
+          }),
+        );
+      }
+    }
+
+    // URL bağlamı yalnızca otomatik kaçış KAPALIYKEN rapor edilir. Kaçış açıkken
+    // `href="{{ url }}"` normal ve güvenli bir kalıptır; her şablonu işaretlemek gürültü olurdu.
+    if (!escapingOff) continue;
+    URL_ATTR_INTERP.lastIndex = 0;
+    let u: RegExpExecArray | null;
+    // AYRI sayaç: ham-çıktı bulguları dosya tavanını doldurduğunda URL bağlamı — tamamen
+    // farklı bir zafiyet sınıfı — sessizce kaybolurdu. Tavanlar sınıf başına olmalı.
+    let urlHits = 0;
+    while ((u = URL_ATTR_INTERP.exec(code)) !== null && urlHits < MAX_PER_FILE) {
+      urlHits++;
+      const line = lineOf(u.index);
+      push(
+        makeFinding({
+          id: `FE-template-url-interp:${file.path}:${line}`,
+          title: "Kaçışsız şablonda URL özniteliğine interpolasyon",
+          severity: "P1",
+          module: "FE",
+          check: "FE-8",
+          category: "Cross-Site Scripting",
+          confidence: "medium",
+          evidence: [{ type: "file", source: file.path, location: String(line), excerpt: excerptOf(u[0]) }],
+          impact:
+            "Otomatik kaçış kapalı ve değer bir URL özniteliğine giriyor; " +
+            "`javascript:` şemasıyla tıklamada script çalıştırılabilir.",
+          recommendation:
+            "Değeri URL bağlamına uygun kodla (HTML kaçışı burada yetmez); şemayı allow-list ile " +
+            "sınırla (yalnızca http/https/mailto); otomatik kaçışı aç.",
+          effort: "M",
+          autoFixable: false,
+          references: ["OWASP A03:2021", "CWE-79", "ASVS 5.3"],
+        }),
+      );
+    }
+  }
+}
 
 /** FE-2 — CSP 'unsafe-inline'/'unsafe-eval'. Dosya başına en fazla bir bulgu. */
 function checkCspUnsafe(file: FeFile, push: Push): void {
@@ -316,6 +478,9 @@ export function analyzeFe(data: FeData): Finding[] {
     seen.add(f.fingerprint);
     findings.push(f);
   };
+  // Dosya-üstü: kaçış yapılandırması bir dosyada, sonucu başka dosyalardadır.
+  checkTemplateEscaping(data, push);
+
   for (const file of data.files) {
     checkCspUnsafe(file, push);
     checkMessageOrigin(file, push);
@@ -341,6 +506,7 @@ export const feModule: WardenModule = {
         include: FE_SCAN_FILE,
         skip: FE_SKIP,
         maxDepth: 6,
+        coverage: ctx.coverage,
       });
       const window = analyzeFe(collectFeData(ctx.fs));
       const seen = new Set<string>();

@@ -23,3 +23,16 @@ export function komutCalistir(req, cp) {
   const { cmd } = req.body;
   cp.exec("ls " + cmd);
 }
+
+// SSRF: hedef URL kullanıcı girdisinden türeyen bir DEĞİŞKEN üzerinden geliyor.
+// Sink satırında `req.` görünmez; bağı yalnızca taint kurabilir (B6-ssrf-node-var).
+export function arastirmaVekili(req, res, needle) {
+  const url = req.query.url + req.query.symbol;
+  return needle.get(url, (err, r, body) => res.end(body));
+}
+
+// SSRF DEĞİL: hedef sabit. requiresTaint sayesinde bulgu ÜRETİLMEMELİ.
+export function saglikKontrolu(needle) {
+  const url = "https://status.internal.example.com/health";
+  return needle.get(url, () => {});
+}

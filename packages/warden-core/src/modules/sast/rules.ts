@@ -75,11 +75,38 @@ export const SAST_RULES: readonly SourceRule[] = [
   {
     id: "B1-hardcoded-secret", check: "B1", module: "B", title: "Sabit string'e atanmış secret/parola",
     severity: "P1", category: "Secret", confidence: "medium",
-    pattern: /\b(api[_-]?key|apikey|secret|client[_-]?secret|password|passwd|access[_-]?token)\b\s*[:=]\s*['"][^'"$\s]{8,}['"]/i,
+    /*
+     * Anahtar adı camelCase OLABİLİR — ve JS/TS'te genelde öyledir.
+     *
+     * Önceki desen `\bsecret\b` gibi kelime sınırları kullanıyordu; `cookieSecret`,
+     * `cryptoKey`, `zapApiKey`, `dbPassword` gibi adlarda `\b` sınırı oluşmadığı için
+     * hiçbiri eşleşmiyordu. Bu, NodeGoat benchmark'ında altı gerçek sırrın kaçmasına yol
+     * açtı (gerçek bir ZAP API anahtarı dâhil) — Warden'ın en temel yeteneğindeki bir kör
+     * nokta, ölçülene kadar görülmedi.
+     *
+     * Sınırlar yerine serbest ön/son ek: `[a-z0-9_]*`. Yanlış pozitif koruması, değerin
+     * BOŞLUKSUZ 8+ karakter olması şartından gelir — "secretDescription: 'uzun bir metin'"
+     * boşluk içerdiği için eşleşmez.
+     *
+     * `$` KARAKTERİ: eski desen değerin herhangi bir yerinde `$` geçmesini yasaklıyordu
+     * (`[^'"$\s]`), amaç `"$DB_PASSWORD"` gibi değişken REFERANSLARINI elemekti. Ama bu
+     * filtre gerçek pozitifleri de eliyordu: Django'nun ürettiği `SECRET_KEY` değerleri
+     * rastgele karakter içerir ve `$` bunlardan biridir — pygoat benchmark'ında tam da bu
+     * yüzden kaçtı. Doğru kural, `$` ile BAŞLAYAN değeri elemek: `(?!\$)`. Böylece
+     * `"$VAR"` ve `"${VAR}"` elenirken `"a!$km5..."` yakalanır.
+     */
+    pattern: /[a-z0-9_]*(api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token|refresh[_-]?token|crypto[_-]?key|encryption[_-]?key|signing[_-]?key|private[_-]?key)[a-z0-9_]*\s*[:=]\s*['"](?!\$)[^'"\s]{8,}['"]/i,
     pathExclude: /\.(md|txt)$/i,
     impact: "Gizli değer kaynak kodda; env'den okunmuyor olabilir (process.env değilse risk).",
     recommendation: "Değeri process.env/secret manager'dan oku; koddan kaldır; rotasyon yap.",
     references: ["OWASP A07:2021", "ASVS 6.4"], effort: "S",
+    /*
+     * Varsayılan 3 tavanı burada zararlıydı: sırlar tek bir config dosyasında kümelenir
+     * (`config/env/all.js` gibi) ve dördüncüsü sessizce kırpılırdı. Kırpılan her sır
+     * rotasyon gerektiren gerçek bir maruziyettir; gürültü değil. Fixture testinde tam
+     * olarak bu yaşandı — dbPassword, dosyadaki dördüncü sır olduğu için kayboldu.
+     */
+    maxPerFile: 12,
   },
 
   // ---- B3 Zayıf kripto ----------------------------------------------------
@@ -359,9 +386,31 @@ export const SAST_RULES: readonly SourceRule[] = [
   {
     id: "B6-ssrf-node", taintAware: true, check: "B6", module: "B", title: "SSRF adayı: sunucu isteği URL'i istemci girdisinden",
     severity: "P1", category: "SSRF", confidence: "low",
-    pattern: /\b(axios|fetch|got|superagent|http|https)\s*(\.\w+)?\s*\(\s*[`'"]?[^)]*(req\.(params|query|body)|ctx\.(request|query|params))/i,
+    pattern: /\b(axios|fetch|got|superagent|needle|request|undici|ky)\s*(\.\w+)?\s*\(\s*[`'"]?[^)]*(req\.(params|query|body)|ctx\.(request|query|params))/i,
     pathInclude: /\.(ts|js|mjs|cjs)$/i,
     impact: "İstek hedefi kullanıcı girdisiyle belirleniyor; iç ağ/metadata servisine (169.254.169.254) erişim mümkün.",
+    recommendation: "Hedef host'u allow-list ile doğrula; şema/IP aralığını kısıtla; DNS-rebinding'e karşı çözümlenmiş IP'yi denetle.",
+    references: ["OWASP A10:2021", "ASVS 12.6"], effort: "M",
+  },
+  {
+    /*
+     * SSRF, girdi DEĞİŞKEN üzerinden geldiğinde.
+     *
+     * Yukarıdaki kural girdiyi sink ile aynı satırda arar. Gerçek kodda bu nadirdir:
+     *   const url = req.query.url + req.query.symbol;
+     *   needle.get(url, cb);
+     * İki satır arası bağı yalnızca taint görebilir. Desen tek başına HER HTTP çağrısını
+     * işaretlerdi, bu yüzden `requiresTaint` ile taint doğrulaması ZORUNLU kılındı —
+     * girdi gerçekten ulaşmıyorsa bulgu üretilmez.
+     *
+     * (Bu boşluk NodeGoat benchmark'ında ölçülerek bulundu: `app/routes/research.js:16`.)
+     */
+    id: "B6-ssrf-node-var", taintAware: true, requiresTaint: true,
+    check: "B6", module: "B", title: "SSRF adayı: istek hedefi kullanıcı girdisinden türeyen değişken",
+    severity: "P1", category: "SSRF", confidence: "medium",
+    pattern: /\b(axios|fetch|got|superagent|needle|undici|ky)\s*(\.(get|post|put|patch|delete|head|request))?\s*\(\s*[A-Za-z_$][\w$]*\s*[,)]/,
+    pathInclude: /\.(ts|js|mjs|cjs)$/i,
+    impact: "İstek hedefi kullanıcı girdisinden türüyor; iç ağ/metadata servisine (169.254.169.254) erişim mümkün.",
     recommendation: "Hedef host'u allow-list ile doğrula; şema/IP aralığını kısıtla; DNS-rebinding'e karşı çözümlenmiş IP'yi denetle.",
     references: ["OWASP A10:2021", "ASVS 12.6"], effort: "M",
   },
@@ -373,6 +422,40 @@ export const SAST_RULES: readonly SourceRule[] = [
     impact: "İstek hedefi kullanıcı girdisiyle belirleniyor; iç ağ/metadata servisine erişim mümkün.",
     recommendation: "Hedef host'u allow-list ile doğrula; iç IP aralıklarını engelle.",
     references: ["OWASP A10:2021"], effort: "M",
+  },
+
+  // ---- ReDoS (catastrophic backtracking) ---------------------------------
+  {
+    /*
+     * İç içe niceleyici (nested quantifier): `(a+)+`, `(a*)*`, `([0-9]+)+` …
+     *
+     * Bir grubun içi de dışı da niceleyiciliyse, eşleşmeyen girdide backtracking
+     * kombinatoryal patlar ve tek bir istek CPU'yu kilitleyebilir. Kullanıcı girdisi bu
+     * regex'e verildiğinde uygulama-katmanı DoS'u olur — kimlik doğrulama gerektirmez.
+     *
+     * Desen bilerek DAR, iki şartla:
+     *   1. Grup içinde başka parantez olmamalı (`[^()]*`).
+     *   2. Grup YAKALAYICI olmalı — `(?!\?)` ile `(?:`, `(?=`, `(?<` elenir.
+     *
+     * İkinci şart olmadan `/ASVS\s*([\d]+(?:\.[\d]+)*)/` gibi tamamen güvenli desenler
+     * yakalanıyordu: oradaki `(?:\.[\d]+)*` iç grubu `\.` ayırıcısıyla ayrıldığı için
+     * backtracking patlaması üretmez. Bu yanlış pozitif Warden'ın kendi `risk/asvs.ts`
+     * dosyasında self-scan ile bulundu ve `safe-app` FP muhafızı testi tarafından yakalandı.
+     *
+     * Daha geniş bir ReDoS analizi (alternation overlap gibi) statik olarak güvenilir
+     * yapılamaz. Warden'ın hiç ReDoS kuralı yoktu; boşluk NodeGoat benchmark'ında ölçülerek
+     * görüldü (`app/routes/profile.js:59`).
+     */
+    id: "B6-redos-nested-quantifier", check: "B6", module: "B",
+    title: "ReDoS: regex'te iç içe niceleyici (catastrophic backtracking)",
+    severity: "P2", category: "Denial of Service", confidence: "medium",
+    pattern: /=\s*\/[^/\n]*\((?!\?)[^()]*[+*]\)[+*][^/\n]*\/[gimsuy]*/,
+    pathInclude: /\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+    impact: "Kötü niyetli bir girdi regex motorunu üstel süreye sokar; tek istekle CPU tükenmesi (DoS).",
+    recommendation:
+      "İç içe niceleyiciyi kaldır (`([0-9]+)+` → `[0-9]+`); girdi uzunluğunu sınırla; " +
+      "kritik yollarda RE2 gibi lineer-zamanlı bir motor kullan.",
+    references: ["OWASP A05:2021", "CWE-1333", "ASVS 5.2"], effort: "S",
   },
 
   // ---- SSTI (Server-Side Template Injection) -----------------------------

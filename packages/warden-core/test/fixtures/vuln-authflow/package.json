@@ -1,0 +1,1 @@
+{ "name": "vuln-authflow", "dependencies": { "express": "^4.18.0", "bcrypt-nodejs": "0.0.3" } }

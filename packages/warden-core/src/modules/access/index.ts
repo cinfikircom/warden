@@ -30,11 +30,74 @@ const TENANT_COL = /\b(tenant_?id|tenantId|org_?id|orgId|organi[sz]ation_?id|org
 const HANDLER_SIG = /\breq\.(body|params|query)\b|\bres\.(json|send|status|render)\b|\b(app|router)\.(get|post|put|delete|patch)\s*\(|@(Get|Post|Put|Delete|Patch|Controller)\b|def\s+\w+\(self,\s*request|ViewSet|params\.(require|permit)|\$request->/;
 const ORM_SIG = /\b(prisma|sequelize|typeorm|mongoose|knex|drizzle|getRepository|createQueryBuilder|ActiveRecord)\b|\.(findUnique|findMany|findFirst|findOne|findByPk|findById|objects)\b/i;
 // Auth middleware / rol kontrolü sinyalleri.
-const AUTH_MW = /\b(requireAuth|isAuthenticated|ensureAuth|ensureLoggedIn|authenticate|passport\.authenticate|verifyToken|jwtVerify|authGuard|withAuth|protect|checkAuth|requireUser|requireLogin|@UseGuards|before_action\s*:?\s*:?authenticate|login_required|IsAuthenticated)\b/i;
+// `isLoggedIn` / `loggedIn` / `requireSession` yaygın Express adlandırmalarıdır ve listede
+// yoktu; eksikliği tüm route-düzeyi auth analizini sessizce devre dışı bırakıyordu.
+const AUTH_MW = /\b(requireAuth|isAuthenticated|isLoggedIn|loggedIn|ensureAuth|ensureLoggedIn|requireSession|authenticate|passport\.authenticate|verifyToken|jwtVerify|authGuard|withAuth|protect|checkAuth|requireUser|requireLogin|@UseGuards|before_action\s*:?\s*:?authenticate|login_required|IsAuthenticated)\b/i;
 const ROLE_CHECK = /\b(isAdmin|hasRole|requireRole|checkRole|ensureRole|authorize|can\s*\(|cannot\s*\(|ability|@Roles?\b|permission|acl\b|policy\b|IsAdminUser|has_perm|current_user\.admin)\b/i;
 
 // ACC-2: state-değiştiren route kaydı.
 const ROUTE_MUT = /\b(router|app)\.(post|put|patch|delete)\s*\(/i;
+
+/* ─── Route envanteri ────────────────────────────────────────────────────────
+ *
+ * ACC-2'nin ilk hâli DOSYA seviyesinde çalışıyordu: "bu dosyada yazma route'u var ve
+ * auth sinyali yok". Gerçek route tablolarında bu yetersizdir — tek bir `routes/index.js`
+ * hem korumalı hem korumasız onlarca route içerir ve dosyada bir tane `isLoggedIn` görmek
+ * hepsini korunmuş gösterir.
+ *
+ * Bu ayrıştırıcı her route tanımını tek tek çıkarır: yol, HTTP metodu ve handler'dan
+ * önceki middleware zinciri. Böylece bulgu route düzeyinde ve doğru satırda üretilir.
+ *
+ * Yan kazanç: bu envanter, DAST'ın sabit yol listesi yerine uygulamanın gerçek yüzeyini
+ * denemesi için de gereken veridir (bkz. docs/DURUM-VE-GELECEK.md, endpoint envanteri).
+ *
+ * (Boşluk NodeGoat benchmark'ında ölçülerek bulundu: 6 authz/idor maddesi bu yüzden kaçıyordu.)
+ */
+const ROUTE_DEF = /\b(?:app|router)\.(get|post|put|patch|delete|all)\s*\(\s*(['"`])([^'"`]+)\2\s*(?:,([^)]*))?\)/gi;
+/** Yol parametresi bir KİMLİK mi (`:userId`, `:accountId`, `:id`)? */
+const ID_PARAM = /:(\w*(?:id|uuid|guid))\b/i;
+/** Kaynak sahipliğini doğrulayan middleware. */
+const OWNERSHIP_MW = /\b(checkOwner|isOwner|ensureOwner|verifyOwnership|authorizeResource|canAccess|scopeToUser)\b/i;
+
+interface RouteDef {
+  readonly method: string;
+  readonly path: string;
+  readonly middlewares: string;
+  readonly line: number;
+  readonly raw: string;
+}
+
+/** JS/TS yorumlarını boşlukla değiştirir — konum kayması olmasın diye uzunluk korunur. */
+function blankComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, (m, p1: string) => p1 + " ".repeat(m.length - p1.length));
+}
+
+/**
+ * Bir dosyadaki route tanımlarını çıkarır.
+ *
+ * Yorumlar ÖNCE temizlenir: düzeltilmiş sürümler kod tabanlarında sıkça yorum içinde bekler
+ * (NodeGoat'ta `app.get("/benefits", isLoggedIn, isAdmin, …)` tam olarak öyle durur) ve
+ * onları gerçek route sanmak, korumasız bir route'u korunmuş göstererek bulguyu yutardı.
+ */
+export function extractRoutes(content: string): RouteDef[] {
+  const code = blankComments(content);
+  const out: RouteDef[] = [];
+  ROUTE_DEF.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ROUTE_DEF.exec(code)) !== null) {
+    const before = code.slice(0, m.index);
+    out.push({
+      method: (m[1] ?? "").toLowerCase(),
+      path: m[3] ?? "",
+      middlewares: m[4] ?? "",
+      line: before.split("\n").length,
+      raw: m[0].replace(/\s+/g, " ").trim(),
+    });
+  }
+  return out;
+}
 // ACC-4: ayrıcalıklı/admin route.
 const ADMIN_ROUTE = /\.(post|put|patch|delete)\s*\(\s*["'`][^"'`]*(admin|\/role|set[-_]?role|grant|revoke|promote|impersonate|permission)/i;
 
@@ -97,14 +160,105 @@ export function analyzeAccess(data: AccessData): Finding[] {
     findings.push(f);
   };
 
+  /*
+   * ACC-4 (proje düzeyi) — kimlik doğrulama var ama ROL/İZİN kontrolü hiç yok.
+   *
+   * Bu ayrım bilinçli olarak yol adına DEĞİL, kod tabanının bütününe bakar. "Ayrıcalıklı yol"
+   * listesi (`/admin`, `/manage` …) tutmak cazip ama yanıltıcıdır: bir uygulamanın en kritik
+   * ayrıcalıklı ucu `/benefits` ya da `/payouts` gibi tamamen alana özgü bir ad taşıyabilir.
+   * Böyle bir liste yalnızca tahmin ettiğimiz adları yakalar ve ölçüldüğü örneğe göre
+   * şişirilmeye açıktır.
+   *
+   * Ölçülebilir ve genel olan şey şudur: uygulama kullanıcıları ayırt ediyor (auth var) ama
+   * hiçbir yerde yetki seviyesi ayırt etmiyor. O zaman giriş yapmış HER kullanıcı, en
+   * ayrıcalıklı işlemi de yapabilir.
+   */
+  /*
+   * Ölçüt "kodda `isAdmin` kelimesi geçiyor mu" DEĞİL, "bir route'un middleware zincirinde
+   * rol kontrolü UYGULANIYOR mu" olmalı. Fark kritik: NodeGoat'ta `isAdmin` üç dosyada
+   * geçiyor ama hepsi VERİ olarak (`user: { isAdmin: true }`) — hiçbir route'ta middleware
+   * değil. Kelime aramak, hiç uygulanmayan bir rol modelini uygulanmış gösteriyordu.
+   *
+   * Bu yüzden yalnızca route tablosu AYRIŞTIRILABİLEN projelerde çalışır; Django/Rails gibi
+   * farklı route yapılarında sessizce atlanır (yanlış pozitif üretmektense ölçmemek yeğdir).
+   */
+  const allRoutes = data.files.flatMap((f) => extractRoutes(f.content));
+  const anyRoleInRoutes = allRoutes.some((r) => ROLE_CHECK.test(r.middlewares));
+  if (data.usesAuth && allRoutes.length > 0 && !anyRoleInRoutes) {
+    const withMut = data.files.find((f) => ROUTE_MUT.test(f.content));
+    if (withMut) {
+      const li = withMut.content.split(/\r?\n/).findIndex((l) => ROUTE_MUT.test(l));
+      push(makeFinding({
+        id: "ACC-4-no-role-model", title: "Kimlik doğrulama var ama hiçbir yerde rol/izin kontrolü yok",
+        severity: "P1", module: "ACCESS", check: "ACC-4", category: "Privilege Escalation", confidence: "medium",
+        evidence: [{
+          type: "file", source: withMut.path, ...(li >= 0 ? { location: String(li + 1) } : {}),
+          excerpt: "auth middleware kullanılıyor; rol/izin kontrolü (isAdmin/requireRole/@Roles/permission) hiçbir dosyada yok",
+        }],
+        impact:
+          "Uygulama kullanıcıları ayırt ediyor ama yetki seviyelerini ayırt etmiyor: giriş yapmış " +
+          "herhangi bir kullanıcı, yönetici işlemleri dâhil her state-değiştiren ucu çağırabilir (OWASP A01).",
+        recommendation:
+          "Rol/izin modeli tanımla ve ayrıcalıklı route'lara rol middleware'i ekle (isAdmin/requireRole/@Roles). " +
+          "Varsayılan-kapalı uygula: yetki gerektirmeyen uçları açıkça işaretle.",
+        effort: "L", autoFixable: false, references: ["OWASP A01:2021", "OWASP API5:2023", "CWE-862"],
+      }));
+    }
+  }
+
   for (const { path, content } of data.files) {
     const lines = content.split(/\r?\n/);
     const fileHasAuth = AUTH_MW.test(content);
     const fileHasRole = ROLE_CHECK.test(content);
     const fileHasMutRoute = ROUTE_MUT.test(content);
 
-    // ACC-2 — state-değiştiren endpoint auth middleware'i olmadan (proje geneli auth kullanıyorken).
-    if (data.usesAuth && fileHasMutRoute && !fileHasAuth) {
+    /*
+     * Route ENVANTERİ — dosya seviyesi heuristiğin yerine geçer.
+     *
+     * Route tanımları ayrıştırılabildiyse her biri tek tek değerlendirilir ve bulgu doğru
+     * satırda üretilir. Ayrıştırma başarısızsa (farklı framework, dinamik kayıt) aşağıdaki
+     * dosya-seviyesi ACC-2 heuristiği devreye girer — yetenek kaybı olmaz.
+     */
+    const routes = extractRoutes(content);
+    for (const r of routes) {
+      const mwHasAuth = AUTH_MW.test(r.middlewares);
+      const mutating = r.method !== "get" && r.method !== "all";
+
+      if (data.usesAuth && mutating && !mwHasAuth) {
+        push(makeFinding({
+          id: `ACC-2-route-no-auth:${path}:${r.line}`,
+          title: "State-değiştiren route'un middleware zincirinde auth yok",
+          severity: "P1", module: "ACCESS", check: "ACC-2", category: "Broken Access Control", confidence: "medium",
+          evidence: [{ type: "file", source: path, location: String(r.line), excerpt: r.raw.slice(0, 160) }],
+          impact: "Yetki kontrolü olmayan bir yazma endpoint'i, kimliği doğrulanmamış/yetkisiz kullanıcının veri değiştirmesine izin verir (OWASP A01).",
+          recommendation: "Bu route'a auth middleware ekle; router seviyesinde varsayılan-kapalı uygula ve istisnaları açıkça işaretle.",
+          effort: "M", autoFixable: false, references: ["OWASP A01:2021", "OWASP API5:2023"],
+        }));
+      }
+
+      // ACC-1 — yol parametresi bir kimlik ve sahiplik doğrulaması yok: klasik IDOR yüzeyi.
+      // Kaynak, istemcinin verdiği id ile seçiliyor; sunucu bunun çağıranın kaynağı olduğunu
+      // doğrulamıyorsa başka kullanıcının verisi okunabilir/değiştirilebilir.
+      if (ID_PARAM.test(r.path) && !OWNERSHIP_MW.test(r.middlewares) && !ROLE_CHECK.test(r.middlewares)) {
+        push(makeFinding({
+          id: `ACC-1-idor-route:${path}:${r.line}`,
+          title: "Route kimlik parametresi alıyor ama sahiplik doğrulaması yok (IDOR)",
+          severity: "P1", module: "ACCESS", check: "ACC-1", category: "Broken Access Control", confidence: "medium",
+          evidence: [{ type: "file", source: path, location: String(r.line), excerpt: r.raw.slice(0, 160) }],
+          impact:
+            "Kaynak, istemcinin verdiği kimlikle seçiliyor. Sunucu bu kimliğin çağırana ait olduğunu " +
+            "doğrulamazsa, id'yi değiştiren herkes başkasının verisini okuyabilir veya değiştirebilir (IDOR).",
+          recommendation:
+            "Kaynağı oturumdaki kullanıcıya göre filtrele (`where: { id, userId: session.userId }`) ya da " +
+            "sahiplik middleware'i ekle. Mümkünse tahmin edilemez kimlik (UUID) kullan — ama bu tek başına yeterli değildir.",
+          effort: "M", autoFixable: false, references: ["OWASP A01:2021", "OWASP API1:2023", "CWE-639"],
+        }));
+      }
+    }
+
+    // ACC-2 (dosya seviyesi) — yalnızca route ayrıştırılamadığında. Aksi halde yukarıdaki
+    // route-düzeyi bulgularla aynı sorunu ikinci kez, daha kaba biçimde raporlardı.
+    if (routes.length === 0 && data.usesAuth && fileHasMutRoute && !fileHasAuth) {
       const li = lines.findIndex((l) => ROUTE_MUT.test(l));
       push(makeFinding({
         id: `ACC-2-route-no-auth:${path}`, title: "State-değiştiren endpoint yetki (auth) middleware'i olmadan tanımlı",
@@ -168,8 +322,9 @@ export const accessModule: WardenModule = {
     return collectAccessData(ctx.fs).usesWeb;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeAccess(collectAccessData(ctx.fs));
-    ctx.audit.info(`ACCESS: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectAccessData(ctx.fs);
+    const findings = analyzeAccess(data);
+    ctx.audit.info(`ACCESS: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

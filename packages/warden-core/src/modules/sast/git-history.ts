@@ -112,6 +112,9 @@ export function historyHitsToFindings(hits: readonly HistoryHit[]): Finding[] {
  * Best-effort git geçmişi taraması. `.git` yoksa veya git komutu başarısızsa boş döner
  * (asla fırlatmaz). Son `maxCommits` commit ile sınırlı (varsayılan 500).
  */
+/** Geçmiş penceresi. Kapsam beyanı bu sayıyı rapora yazdığı için dışa açık. */
+export const GIT_HISTORY_MAX_COMMITS = 500;
+
 export function collectGitHistorySecrets(
   root: string,
   ctx: DetectContext,
@@ -119,7 +122,7 @@ export function collectGitHistorySecrets(
   opts: { maxCommits?: number; maxBytes?: number } = {},
 ): { findings: Finding[]; ran: boolean } {
   if (!ctx.exists(".git")) return { findings: [], ran: false };
-  const maxCommits = opts.maxCommits ?? 500;
+  const maxCommits = opts.maxCommits ?? GIT_HISTORY_MAX_COMMITS;
   const maxBytes = opts.maxBytes ?? 8_000_000;
   try {
     audit?.command(`git log -p -n ${maxCommits} (secret taraması)`, root);

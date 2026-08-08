@@ -84,6 +84,20 @@ waivers:
   - path: "packages/warden-core/src/modules/sast/rules.ts"
     check: "FE-3"
     reason: "FE kurallarının modules/fe/'ye taşındığını belirten göç yorumu."
+  - path: "packages/warden-core/src/modules/fe/index.ts"
+    check: "FE-3"
+    reason: >-
+      FE-8 (şablon kaçışı) katmanının açıklama yorumu, FE-3'ün kapsadığı istemci-tarafı
+      sink adlarını (`innerHTML`, `dangerouslySetInnerHTML`) metin olarak anıyor. Yorumdur,
+      çalıştırılan kod değil — aynı bağlam-körlüğü kök nedeni.
+
+  # ── WEB (CSRF) kural tanımı ─────────────────────────────────────────────────
+  # WEB-1'in `CSRF_DISABLED` deseni ve onu açıklayan yorumlar `@csrf_exempt` metnini
+  # içerir. Warden bir Django uygulaması değildir; burada CSRF muafiyeti KULLANILMIYOR,
+  # yalnızca tespit deseni tanımlanıyor.
+  - path: "packages/warden-core/src/modules/web/index.ts"
+    check: "WEB-1"
+    reason: "CSRF-devre-dışı kuralının kendi desen tanımı ve açıklama yorumları — kullanım değil."
 
   # ── K8S kural tanımı ────────────────────────────────────────────────────────
   - path: "packages/warden-core/src/modules/k8s/index.ts"

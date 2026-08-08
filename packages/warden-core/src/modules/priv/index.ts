@@ -32,7 +32,9 @@ export function stripComments(s: string): string {
 // PII alan adları (uygulanabilirlik + PRIV-1/2).
 const PII_FIELD = /\b(e_?mail|phone|telefon|gsm|tc_?kimlik|tckn|ssn|national_?id|passport|iban|address|adres|birth_?date|dogum_?tarihi|full_?name|first_?name|last_?name|surname|credit_?card|card_?number|health|medical|salary|maas|biometric|dni|vat_?number)\b/i;
 // Yüksek-hassas (PRIV-3 at-rest şifreleme + PRIV-5 audit için).
-const SENSITIVE_HIGH = /\b(tc_?kimlik|tckn|ssn|national_?id|passport|iban|credit_?card|card_?number|health|medical|biometric|salary|maas)\b/i;
+// Banka hesap/yönlendirme numaraları ve doğum tarihi listede yoktu; ikisi de kimlik hırsızlığı
+// için doğrudan kullanılabilir ve sızıntıda geri alınamaz (parola gibi değiştirilemezler).
+const SENSITIVE_HIGH = /\b(tc_?kimlik|tckn|ssn|national_?id|passport|iban|credit_?card|card_?number|bank_?acc(ount)?|bankAcc|account_?number|bank_?routing|bankRouting|routing_?number|sort_?code|health|medical|biometric|salary|maas|dob|date_?of_?birth|birth_?date)\b/i;
 // Şifreleme (at-rest) sinyalleri.
 const ENCRYPTION_SIG = /\b(encrypt|cipher|pgcrypto|vault|\bkms\b|field.?encrypt|sequelize-encrypted|@Encrypt|EncryptedField|fernet|libsodium|crypto\.createCipheriv|column_?encryption|tde)\b/i;
 // Silme/anonimleştirme (KVKK/GDPR erasure) sinyalleri.
@@ -168,8 +170,9 @@ export const privModule: WardenModule = {
     return collectPrivData(ctx.fs).usesPii;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzePriv(collectPrivData(ctx.fs));
-    ctx.audit.info(`PRIV: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectPrivData(ctx.fs);
+    const findings = analyzePriv(data);
+    ctx.audit.info(`PRIV: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

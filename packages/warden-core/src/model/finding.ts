@@ -83,6 +83,12 @@ export interface Finding {
   /** Uyum/standart eşleştirmeleri, örn. ["OWASP A02:2021", "ASVS 6.2.3", "PCI-DSS 3.4"]. */
   readonly references?: readonly string[];
   /** CVSS v4 temel skoru (0–10), varsa (risk motoru doldurur). */
+  /**
+   * En spesifik CWE (ör. `CWE-89`). PARENT CWE'ler (74/20/200/284/693) bilerek kullanılmaz —
+   * "bir tür enjeksiyon" demek düzeltmeyi yönlendirmez. Bkz. risk/cwe.ts.
+   * Fingerprint'e GİRMEZ: sonradan eklenmesi mevcut waiver ve delta geçmişini bozmaz.
+   */
+  readonly cwe?: string;
   readonly cvss?: number;
   /** Sömürülebilirlik (risk motoru): ne kadar kolay/uzaktan sömürülür. */
   readonly exploitability?: "high" | "medium" | "low";

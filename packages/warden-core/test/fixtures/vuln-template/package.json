@@ -1,0 +1,1 @@
+{ "name": "vuln-template", "dependencies": { "swig": "^1.4.2", "express": "^4.18.0" } }

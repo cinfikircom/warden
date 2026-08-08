@@ -50,3 +50,6 @@ export function ldapFind(client: any, filters: any, uid: string, cb: unknown) {
 }
 
 export { apiKey, placeholderToken };
+
+// Güvenli: iç grup ayrı bir karakter sınıfıyla (`\.`) ayrılmış — backtracking patlamaz.
+export const SURUM_RE = /SURUM\s*([\d]+(?:\.[\d]+)*)/i;
