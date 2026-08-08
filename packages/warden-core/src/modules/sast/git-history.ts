@@ -40,6 +40,29 @@ function isPlaceholderSecret(token: string): boolean {
   return PLACEHOLDER_SECRET.test(token);
 }
 
+/*
+ * Satır bir sır DEĞİL, sır ARAYAN kodun kendisi mi?
+ *
+ * Git geçmişi taraması ham diff metnine bakar ve `path` waiver'larına erişemez — bulgunun
+ * kaynağı `git-history@<sha>`, bir dosya yolu değil. Sonuç: bir tarayıcının kendi tespit
+ * desenini commit'lemesi kalıcı bir P0 üretiyordu ve waiver ile kapatılamıyordu.
+ *
+ * Ayrım REGEX SÖZDİZİMİNDEN yapılır — değişken tanımından DEĞİL. `const key = "AKIA..."`
+ * gerçek bir sır commit'idir ve elenmemelidir; ilk denemede `const` ölçütü kullanıldı ve
+ * mevcut testler bunu anında yakaladı.
+ *
+ * Ayırt edici işaretler yalnızca regex/şema dilinde bulunur: `{16}` gibi niceleyiciler,
+ * `\b` sınırı, `(?:` grubu, `/^` başlangıcı, ya da açık `pattern`/`regex`/`_RE` adları.
+ * Bir sır dizisinde `{16}` geçmez; onu tanımlayan desende neredeyse her zaman geçer.
+ * `evidence:` / `note:` ise benchmark ground-truth YAML'ının alan adlarıdır.
+ */
+const LOOKS_LIKE_PATTERN_DEF =
+  /\{\d+(?:,\d*)?\}|\\b|\(\?:|\/\^|\bnew RegExp\b|\bregex\b|\bpattern\b|\bPATTERN\b|_RE\b|^\s*(?:evidence|note)\s*:/;
+
+function isPatternDefinition(line: string): boolean {
+  return LOOKS_LIKE_PATTERN_DEF.test(line);
+}
+
 export interface HistoryHit {
   readonly commit: string;
   readonly patternId: string;
@@ -71,6 +94,8 @@ export function scanDiffForSecrets(logOutput: string): HistoryHit[] {
       const match = p.re.exec(added);
       if (!match) continue;
       if (isPlaceholderSecret(match[0])) continue; // belirgin dummy/örnek anahtar → atla
+      // Kural tanımı / test verisi / ground-truth kanıt metni → gerçek maruziyet değil.
+      if (isPatternDefinition(added)) continue;
       const key = `${commit}|${p.id}|${added.trim()}`;
       if (seen.has(key)) continue;
       seen.add(key);

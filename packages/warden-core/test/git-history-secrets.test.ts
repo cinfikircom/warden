@@ -63,3 +63,33 @@ describe("git geçmişi secret ayrıştırıcı (saf)", () => {
     expect(a.map((f) => f.fingerprint)).toEqual(b.map((f) => f.fingerprint));
   });
 });
+
+describe("git geçmişi — kural tanımı vs gerçek sır", () => {
+  /**
+   * Git geçmişi taraması `path` waiver'larına erişemez (bulgunun kaynağı `git-history@<sha>`,
+   * bir dosya yolu değil). Bu yüzden bir tarayıcının KENDİ tespit desenini commit'lemesi
+   * kapatılamayan kalıcı bir P0 üretiyordu. Ayrım regex sözdiziminden yapılır.
+   */
+  it("regex deseni tanımlayan satır sır SAYILMAZ", () => {
+    const diff = [
+      "commit abc1234567890",
+      "+const PEM = /-----BEGIN (?:[A-Z ]*)?PRIVATE KEY-----/;",
+      "+  re: /\\bAKIA[0-9A-Z]{16}\\b/,",
+    ].join("\n");
+    expect(scanDiffForSecrets(diff)).toHaveLength(0);
+  });
+
+  /**
+   * Kritik karşı-taraf: gerçek sırlar da `const x = "..."` biçiminde commit'lenir.
+   * İlk denemede filtre `const` ölçütü kullanıyordu ve bu senaryoyu eliyordu.
+   */
+  it("değişkene atanmış GERÇEK anahtar yine yakalanır", () => {
+    const diff = ["commit def4567890ab", '+const awsKey = "AKIAZZ7QWERTYUIOPLKJ";'].join("\n");
+    expect(scanDiffForSecrets(diff)).toHaveLength(1);
+  });
+
+  it("ground-truth YAML kanıt alanı sır sayılmaz", () => {
+    const diff = ["commit fed9876543ab", '+    evidence: "-----BEGIN RSA PRIVATE KEY-----"'].join("\n");
+    expect(scanDiffForSecrets(diff)).toHaveLength(0);
+  });
+});
