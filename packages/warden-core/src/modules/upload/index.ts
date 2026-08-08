@@ -141,8 +141,9 @@ export const uploadModule: WardenModule = {
     return collectUploadData(ctx.fs).usesUpload;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeUpload(collectUploadData(ctx.fs));
-    ctx.audit.info(`UPLOAD: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectUploadData(ctx.fs);
+    const findings = analyzeUpload(data);
+    ctx.audit.info(`UPLOAD: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

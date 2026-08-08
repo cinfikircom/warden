@@ -1,6 +1,8 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { DetectContext } from "./types.ts";
+import type { CoverageCollector } from "../report/coverage.ts";
+import { TEST_PATH } from "../util/paths.ts";
 
 const IGNORE_DIRS = new Set([
   "node_modules",
@@ -39,6 +41,12 @@ const ALLOW_DOT_DIRS = new Set([".github", ".circleci", ".gitlab"]);
 export const DEFAULT_MAX_DEPTH = 6;
 
 /**
+ * Ağaç yürüyüşünde varsayılan dosya tavanı. Bundan KÜÇÜK bir `limit` geçmek, çağıranın
+ * kasıtlı bir "var mı?" sondajı yaptığı anlamına gelir (bkz. `find()` içindeki gerekçe).
+ */
+export const DEFAULT_FILE_LIMIT = 2000;
+
+/**
  * READ-ONLY dosya bağlamı — dedektörler ve modüller bunu kullanır.
  *
  * `scopePaths` verilirse (diff-scope tarama, bkz. detect/scope.ts) YALNIZCA `find()`
@@ -50,7 +58,24 @@ export const DEFAULT_MAX_DEPTH = 6;
  * bir yokluk-temelli yanlış pozitif fabrikasına dönerdi. Daralan şey "neyi TARIYORUZ",
  * "proje neye SAHİP" değil.
  */
-export function createFsContext(projectRoot: string, scopePaths?: ReadonlySet<string>): DetectContext {
+export interface FsContextOptions {
+  /** Diff-scope tarama kapsamı (bkz. detect/scope.ts). */
+  readonly scopePaths?: ReadonlySet<string> | undefined;
+  /**
+   * Kapsam toplayıcı. Verilirse derinlik ve dosya-sayısı kesmeleri KAYDEDİLİR ve rapordaki
+   * Kapsam Beyanı'nda görünür. Verilmezse davranış eskisiyle birebir aynıdır (sessiz kesme) —
+   * geriye dönük uyum için.
+   */
+  readonly coverage?: CoverageCollector | undefined;
+  /** Varsayılan derinlik sınırını geçersiz kıl (CLI: `--max-depth`). */
+  readonly maxDepth?: number | undefined;
+  /** Varsayılan dosya-sayısı tavanını geçersiz kıl (CLI: `--max-files`). */
+  readonly maxFiles?: number | undefined;
+}
+
+export function createFsContext(projectRoot: string, options: FsContextOptions = {}): DetectContext {
+  const { scopePaths, coverage } = options;
+
   const readFile = (relPath: string): string | null => {
     try {
       return readFileSync(join(projectRoot, relPath), "utf8");
@@ -61,12 +86,48 @@ export function createFsContext(projectRoot: string, scopePaths?: ReadonlySet<st
   const exists = (relPath: string): boolean => existsSync(join(projectRoot, relPath));
 
   const find: DetectContext["find"] = (predicate, opts) => {
-    const maxDepth = opts?.maxDepth ?? DEFAULT_MAX_DEPTH;
-    const limit = opts?.limit ?? 2000;
+    // Öncelik: çağıran modülün açık isteği > kullanıcının CLI ayarı > yerleşik varsayılan.
+    // Modül kendi derinliğini geçtiğinde (ör. FE: 6) kullanıcının daha YÜKSEK ayarı kazanır —
+    // aksi halde `--max-depth 9` bazı modüllerde sessizce yok sayılırdı.
+    const requested = opts?.maxDepth ?? DEFAULT_MAX_DEPTH;
+    const maxDepth = options.maxDepth !== undefined ? Math.max(options.maxDepth, requested) : requested;
+    const limit = options.maxFiles ?? opts?.limit ?? DEFAULT_FILE_LIMIT;
     const out: string[] = [];
 
+    /*
+     * Tavana ulaşmak HER ZAMAN kapsam kaybı değildir.
+     *
+     * Modüllerin çoğu "bu projede X var mı?" diye sorarken `{ limit: 1 }` geçer — bir tane
+     * bulmak yeterlidir ve döngü kasıtlı olarak orada durur. Bunu "kalan dosyalar hiç
+     * listelenmedi" diye raporlamak, kapsam beyanının kendisini yanlış alarm üreten bir
+     * gürültü kaynağına çevirirdi. Beyanın değeri doğruluğundan geliyor: kaybı gizlemek kadar
+     * olmayan kaybı bildirmek de onu güvenilmez kılar.
+     *
+     * Bu yüzden yalnızca GERÇEK bir tavan (yerleşik varsayılan ya da kullanıcının --max-files
+     * ayarı) aşıldığında rapor edilir.
+     */
+    const limitIsRealCeiling = options.maxFiles !== undefined || limit >= DEFAULT_FILE_LIMIT;
+
     const walk = (dir: string, depth: number): void => {
-      if (depth > maxDepth || out.length >= limit) return;
+      if (out.length >= limit) return;
+      if (depth > maxDepth) {
+        // SESSİZ DEĞİL: bu alt ağaç hiç görülmedi ve bu, rapora yazılması gereken bir kayıptır.
+        //
+        // Tek istisna test/fixture ağaçları: oradaki dosyalar kural katmanında zaten
+        // eleniyor (util/paths.ts TEST_PATH), dolayısıyla kesilmeleri gerçek bir denetim
+        // kaybı değil. Onları listelemek beyanı gerçek kayıpların görünmediği bir listeye
+        // çevirirdi.
+        const rel = relative(projectRoot, dir).split(sep).join("/");
+        if (!TEST_PATH.test(`${rel}/`)) {
+          coverage?.limit(
+            "depth",
+            "depth",
+            `Dizin derinliği sınırı (${maxDepth}) aşıldığı için bu dizinlerin altı hiç taranmadı. \`--max-depth\` ile yükseltilebilir.`,
+            rel,
+          );
+        }
+        return;
+      }
       let entries: import("node:fs").Dirent[];
       try {
         entries = readdirSync(dir, { withFileTypes: true });
@@ -74,7 +135,16 @@ export function createFsContext(projectRoot: string, scopePaths?: ReadonlySet<st
         return;
       }
       for (const e of entries) {
-        if (out.length >= limit) return;
+        if (out.length >= limit) {
+          if (limitIsRealCeiling) {
+            coverage?.limit(
+              "file-count",
+              "file-count",
+              `Dosya sayısı tavanına (${limit}) ulaşıldı; kalan dosyalar hiç listelenmedi. \`--max-files\` ile yükseltilebilir.`,
+            );
+          }
+          return;
+        }
         const full = join(dir, e.name);
         if (e.isDirectory()) {
           if (IGNORE_DIRS.has(e.name)) continue;

@@ -6,7 +6,10 @@ import { reportPaths, writeReport } from "./report/generator.ts";
 import type { ReportPaths } from "./report/generator.ts";
 import { computeDelta } from "./report/delta.ts";
 import type { PreviousRun, Delta } from "./report/delta.ts";
+import { CoverageCollector } from "./report/coverage.ts";
+import type { CoverageManifest } from "./report/coverage.ts";
 import { enrichRisk } from "./risk/score.ts";
+import { enrichCwe } from "./risk/cwe.ts";
 import { enrichKevEpss, loadKevData } from "./risk/kev.ts";
 import { enrichReachability, buildImportGraph } from "./risk/reachability.ts";
 import { loadWaivers, partitionWaived } from "./risk/waiver.ts";
@@ -23,14 +26,20 @@ import { detectStack, defaultDetectors } from "./detect/registry.ts";
 import type { StackDetector } from "./detect/types.ts";
 import { defaultModules } from "./registry.ts";
 
-// 0.11.0 — Strix yetenek devralma turu: dosya-içi taint/veri-akışı, diff-scope tarama
-// (--since), waiver `path` selector'ı. Ayrıca ctx.find() derinlik kör noktası (varsayılan
-// 4→6) kapatıldı ve test/fixture eleme tek kaynağa (util/paths.ts) toplandı.
+// 0.12.0 — KAPSAM BEYANI turu (Faz A: dürüstlük).
 //
-// ⚠ Derinlik değişikliği kullanıcı-görünür: daha önce hiç taranmamış derin dosyalar ilk kez
-// görülür. Bu fingerprint kayması DEĞİL, gerçek yeni bulgudur. Devralma kararları ve
-// alınmayanların gerekçeleri: docs/STRIX-ADOPTION.md
-export const WARDEN_VERSION = "0.11.0";
+// Warden artık yalnızca "ne buldum"u değil, "neyi göremedim"i de raporluyor. Eskiden motorun
+// her katmanında sessiz kırpma vardı (derinlik, dosya sayısı, dosya boyutu, kural başına bulgu
+// tavanı, çöken modül) ve hiçbiri rapora yansımıyordu — "bakamadım" ile "baktım, temiz" aynı
+// görünüyordu. Bir güvenlik aracı için bu, kaçırılan zafiyetten daha tehlikelidir.
+//
+// ⚠ Kullanıcı-görünür değişiklik: yüzey bulamayan modül artık 10.0/10 yerine "kapsam dışı"
+// alır ve genel ortalamaya GİRMEZ. Genel skor bu yüzden değişebilir — bu bir gerileme değil,
+// ilk kez doğru sayının görülmesidir. Fingerprint'e dokunulmadı (K5): kapsam katmanı bulgu
+// üretmez, bulgu bastırmaz; waiver'lar ve delta geçmişi aynen korunur.
+//
+// Gerekçe ve yol haritası: docs/DURUM-VE-GELECEK.md · devralma kararları: docs/STRIX-ADOPTION.md
+export const WARDEN_VERSION = "0.12.0";
 
 /** Önceki findings.json'ı PreviousRun'a çevirir. Yoksa/bozuksa null (ilk çalışma gibi davranır). */
 function loadPreviousRun(findingsJsonPath: string): PreviousRun | null {
@@ -71,6 +80,13 @@ export interface ScanOptions {
    * daraltması sessizce başarısız olup eksik denetimi tam denetim gibi göstermemeli.
    */
   readonly since?: string;
+  /**
+   * Dizin derinliği sınırını yükselt (varsayılan 6). Derin monorepo'larda
+   * `apps/web/src/app/(dashboard)/admin/page.tsx` 7. seviyededir ve varsayılanla HİÇ görülmez.
+   */
+  readonly maxDepth?: number | undefined;
+  /** Ağaç yürüyüşünde dosya sayısı tavanını yükselt (varsayılan 2000). */
+  readonly maxFiles?: number | undefined;
 }
 
 export interface ScanResult {
@@ -90,6 +106,11 @@ export interface ScanResult {
    * göstermek ve delta'yı bastırmak için kullanır.
    */
   readonly scope: { readonly since: string; readonly fileCount: number } | null;
+  /**
+   * KAPSAM BEYANI — bu çalışmada neyin görülüp neyin görülmediği.
+   * Bulguların yanında okunması gerekir: 0 bulgu, kapsam %40 ise "temiz" demek değildir.
+   */
+  readonly coverage: CoverageManifest;
 }
 
 /**
@@ -143,10 +164,20 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
     }
   }
 
-  const fs = createFsContext(opts.projectRoot, scope?.paths);
-  const ctx: ScanContext = { projectRoot: opts.projectRoot, authz, audit, stack, fs };
+  const coverage = new CoverageCollector();
+  const fs = createFsContext(opts.projectRoot, {
+    scopePaths: scope?.paths,
+    coverage,
+    maxDepth: opts.maxDepth,
+    maxFiles: opts.maxFiles,
+  });
+  const ctx: ScanContext = { projectRoot: opts.projectRoot, authz, audit, stack, fs, coverage };
 
   // 3) Modülleri koş.
+  //
+  // Her modülün akıbeti KAYDEDİLİR. Eskiden çöken modül ile hiç bulgu bulmayan modül raporda
+  // ayırt edilemiyordu: ikisi de sessizdi ve boyut ya "n/d" ya da 10.0 görünüyordu. Yarısı
+  // çökmüş bir tarama temiz rapor gibi okunabiliyordu.
   const modules = opts.modules ?? defaultModules();
   const findings: Finding[] = [];
   const ranModules = new Set<ModuleId>();
@@ -154,10 +185,26 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   for (const mod of modules) {
     if (mod.active && mode !== "active") {
       audit.info(`Modül ${mod.id} (${mod.title}) atlandı: aktif modül + pasif mod.`);
+      coverage.module({
+        module: mod.id,
+        title: mod.title,
+        status: "not-run",
+        reason: "Aktif (DAST) modül — yetki kapısı açık değil, hiç çalıştırılmadı.",
+        surface: null,
+        findings: 0,
+      });
       continue;
     }
     if (!mod.applicable(ctx)) {
       audit.info(`Modül ${mod.id} (${mod.title}) atlandı: stack uyumsuz.`);
+      coverage.module({
+        module: mod.id,
+        title: mod.title,
+        status: "surface-absent",
+        reason: "Bu projede ilgili yüzey bulunamadı (stack uyumsuz).",
+        surface: 0,
+        findings: 0,
+      });
       continue;
     }
     audit.info(`Modül ${mod.id} (${mod.title}) çalışıyor...`);
@@ -167,10 +214,40 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
       if (out.artifact !== undefined) artifacts.set(mod.id, out.artifact);
       ranModules.add(mod.id);
       audit.info(`Modül ${mod.id} bitti: ${out.findings.length} bulgu.`);
+      const surface = out.surface ?? null;
+      coverage.module({
+        module: mod.id,
+        title: mod.title,
+        // Modül çalıştı ama tek bir gerçek yüzey öğesi bulamadıysa, bu "temiz" değil
+        // "denetlenecek bir şey yoktu" demektir — skor tablosunda puan almamalı.
+        status: surface === 0 ? "surface-absent" : "audited",
+        reason: surface === 0 ? "Modül çalıştı ama denetlenecek somut bir yüzey öğesi bulamadı." : null,
+        surface,
+        findings: out.findings.length,
+      });
     } catch (err) {
+      // Bu boyut DENETLENMEDİ. Sessiz kalmak, denetlenmemişi temiz göstermek olurdu.
       audit.warn(`Modül ${mod.id} hata verdi, atlandı: ${String(err)}`);
+      coverage.module({
+        module: mod.id,
+        title: mod.title,
+        status: "failed",
+        reason: `Modül hata verdi: ${String(err)}`,
+        surface: null,
+        findings: 0,
+      });
     }
   }
+
+  // Kapsam beyanının kendi sınırlarını da beyan et — bu katman kendi eksiğini gizlememeli.
+  coverage.unmeasured(
+    "Derinlik sınırında kesilen dizinlerin altında kaç dosya olduğu sayılmıyor; " +
+      "atlanan dosya sayısı bu yüzden bilinen bir ALT SINIRDIR.",
+  );
+  coverage.unmeasured(
+    "`exists()` / `readFile()` ile yapılan yokluk kontrolleri (ör. \"helmet kurulu mu\") " +
+      "dosya kapsamı yüzdesine girmez — bunlar ağaç taraması değildir.",
+  );
 
   const finishedAt = new Date().toISOString();
 
@@ -182,9 +259,8 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   }
   //    + reachability: zafiyetli bağımlılık kaynak import grafında mı (FP azaltma).
   const importGraph = buildImportGraph(fs);
-  const enriched = enrichReachability(
-    enrichKevEpss(enrichRisk(findings), kevData.kev, kevData.epss),
-    importGraph,
+  const enriched = enrichCwe(
+    enrichReachability(enrichKevEpss(enrichRisk(findings), kevData.kev, kevData.epss), importGraph),
   );
 
   // 4b) Waiver: .warden-ignore.yml ile gerekçeli bastırılan bulguları ayır. Süresi
@@ -200,6 +276,15 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   // OWASP Top 10 başa: raporun "Uyum Özeti" tablosunda en üstte görünmeli.
   const extraChecklists = [buildOwaspChecklist(active), buildAsvsChecklist(active), buildCisChecklist(active), buildIsoChecklist(active)];
 
+  // Reachability için import grafı kurulurken de ağaç yürünür; o okumalar da kapsama sayılır.
+  const manifest = coverage.build();
+  if (manifest.limits.length > 0) {
+    audit.warn(
+      `Kapsam kaybı: ${manifest.limits.map((l) => `${l.kind}×${l.count}`).join(", ")} — ` +
+        "ayrıntı raporun Kapsam Beyanı bölümünde.",
+    );
+  }
+
   // 5) Rapor üret.
   writeReport(active, {
     projectRoot: opts.projectRoot,
@@ -213,6 +298,7 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
     finishedAt,
     wardenVersion: WARDEN_VERSION,
     scope: scope ? { since: scope.since, fileCount: scope.paths.size } : undefined,
+    coverage: manifest,
   });
   audit.info(`Rapor yazıldı: ${paths.dir}`);
   if (scope) {
@@ -240,5 +326,6 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
     startedAt,
     finishedAt,
     scope: scope ? { since: scope.since, fileCount: scope.paths.size } : null,
+    coverage: manifest,
   };
 }

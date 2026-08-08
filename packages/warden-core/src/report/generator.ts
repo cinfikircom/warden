@@ -15,6 +15,7 @@ import type { PreviousRun } from "./delta.ts";
 import { buildFindingPrompt, renderFindingPromptMd } from "./prompt.ts";
 import { COMPLIANCE_EMOJI, checklistScore } from "../model/compliance.ts";
 import type { ComplianceResult, Checklist } from "../model/compliance.ts";
+import type { CoverageManifest, ModuleStatus } from "./coverage.ts";
 
 export interface ReportMeta {
   readonly projectRoot: string;
@@ -35,6 +36,11 @@ export interface ReportMeta {
    * yalnızca değişen dosyalar tarandı, dolayısıyla bulgu listesi tam postürü temsil etmez.
    */
   readonly scope?: { readonly since: string; readonly fileCount: number } | undefined;
+  /**
+   * KAPSAM BEYANI — bu çalışmada neyin görülüp neyin görülmediği.
+   * Verilirse rapora "Kapsam Beyanı" bölümü eklenir ve skor tablosu "kapsam dışı" ayrımını yapar.
+   */
+  readonly coverage?: CoverageManifest | undefined;
 }
 
 export interface ReportPaths {
@@ -120,10 +126,115 @@ function countBySeverity(findings: readonly Finding[]): Record<Severity, number>
   return counts;
 }
 
+/** Skor hücresi: puan yoksa NEDEN olmadığını yazar — boş "n/d" hiçbir şey öğretmiyordu. */
+function scoreCell(score: number | null, status: ModuleStatus): string {
+  if (score !== null) return score.toFixed(1);
+  if (status === "surface-absent") return "kapsam dışı";
+  if (status === "failed") return "⚠ hata";
+  return "n/d";
+}
+
+const STATUS_LABEL: Record<ModuleStatus, string> = {
+  audited: "denetlendi",
+  "surface-absent": "kapsam dışı",
+  "not-run": "çalışmadı",
+  failed: "⚠ HATA — denetlenmedi",
+};
+
+/**
+ * KAPSAM BEYANI bölümü.
+ *
+ * Buradaki her satır, eskiden sessizce yutulan bir kapsam kaybıdır. Amaç kullanıcıyı
+ * korkutmak değil, "0 bulgu" ile "0 bulgu ama yüzeyin yarısını göremedim"i ayırt edilebilir
+ * kılmak. Bir güvenlik aracının verebileceği en pahalı yanlış sinyal, göremediği yeri temiz
+ * göstermektir.
+ */
+function renderCoverageSection(cov: CoverageManifest): string[] {
+  const lines: string[] = [];
+  lines.push("## Kapsam Beyanı");
+  lines.push("");
+  lines.push("> Bu bölüm Warden'ın **neyi göremediğini** beyan eder. Bulgu listesi ancak bununla");
+  lines.push("> birlikte okunduğunda anlamlıdır: kapsam dar ise, az bulgu iyi haber değildir.");
+  lines.push("");
+
+  const pct = cov.fileCoveragePercent;
+  lines.push(
+    `**Dosya kapsamı:** ${cov.filesScanned} dosya tarandı` +
+      (cov.filesSkipped > 0
+        ? `, **${cov.filesSkipped} dosya bir sınır yüzünden atlandı**${pct === null ? "" : ` (≈%${pct.toFixed(1)} kapsam)`}.`
+        : " — kural taramasında bilinen bir dosya kaybı yok."),
+  );
+  lines.push("");
+
+  if (cov.limits.length > 0) {
+    lines.push("### Göremediklerim");
+    lines.push("");
+    lines.push("| Kayıp | Adet | Örnek |");
+    lines.push("|-------|:----:|-------|");
+    for (const l of cov.limits) {
+      const samples = l.samples.length > 0 ? l.samples.map((s) => `\`${s}\``).join(", ") : "—";
+      lines.push(`| ${l.detail} | ${l.count} | ${samples} |`);
+    }
+    lines.push("");
+  }
+
+  // Modül tablosu: hangi boyut gerçekten denetlendi, hangisi denetlenemedi.
+  const failed = cov.modules.filter((m) => m.status === "failed");
+  const absent = cov.modules.filter((m) => m.status === "surface-absent");
+  const notRun = cov.modules.filter((m) => m.status === "not-run");
+  const audited = cov.modules.filter((m) => m.status === "audited");
+
+  lines.push("### Modül durumu");
+  lines.push("");
+  lines.push(
+    `Denetlendi: **${audited.length}** · Kapsam dışı: **${absent.length}** · ` +
+      `Çalışmadı: **${notRun.length}** · Hata: **${failed.length}**`,
+  );
+  lines.push("");
+
+  // Çöken modüller EN ÜSTTE ve ayrı: bunlar sessiz kalırsa denetlenmemiş bir boyut
+  // temiz görünür — bu katmanın var olma sebebi tam olarak budur.
+  if (failed.length > 0) {
+    lines.push("> 🔴 **Aşağıdaki boyutlar HATA nedeniyle denetlenmedi.** Rapordaki temizlik bu");
+    lines.push("> boyutları KAPSAMAZ:");
+    lines.push("");
+    for (const m of failed) lines.push(`> - **${m.module}** (${m.title}) — ${m.reason ?? "bilinmeyen hata"}`);
+    lines.push("");
+  }
+
+  // Modül KODU tek başına yetmiyor: `sast` ve `imports` implementasyonlarının ikisi de
+  // "B" koduyla çalışır, dolayısıyla yalnızca kodu yazmak tabloda iki "B" satırı üretir ve
+  // biri "kapsam dışı" göründüğünde SAST'ın çalışmadığı sanılır. Başlık ayrımı zorunlu.
+  lines.push("| Modül | Denetim | Durum | Yüzey | Ham bulgu | Not |");
+  lines.push("|-------|---------|-------|:-----:|:---------:|-----|");
+  for (const m of cov.modules) {
+    const surface = m.surface === null ? "—" : String(m.surface);
+    lines.push(
+      `| ${m.module} | ${m.title} | ${STATUS_LABEL[m.status]} | ${surface} | ${m.findings} | ${m.reason ?? ""} |`,
+    );
+  }
+  lines.push("");
+  lines.push(
+    '_"Yüzey": modülün bulduğu ilgili dosya sayısı ("—" = modül henüz bildirmiyor). ' +
+      '"Ham bulgu": waiver UYGULANMADAN önceki sayı — bu yüzden yukarıdaki toplamdan büyük olabilir; ' +
+      "aradaki fark `.warden-ignore.yml` ile bastırılan bulgulardır._",
+  );
+  lines.push("");
+
+  if (cov.unmeasured.length > 0) {
+    lines.push("### Bu beyanın kendi sınırları");
+    lines.push("");
+    for (const u of cov.unmeasured) lines.push(`- ${u}`);
+    lines.push("");
+  }
+
+  return lines;
+}
+
 function renderReportMd(findings: readonly Finding[], meta: ReportMeta): string {
   const sorted = sortFindings(findings);
   const counts = countBySeverity(findings);
-  const rows = buildScoreboard(findings, meta.ranModules);
+  const rows = buildScoreboard(findings, meta.ranModules, meta.coverage);
   const overall = overallScore(rows);
 
   const lines: string[] = [];
@@ -180,13 +291,20 @@ function renderReportMd(findings: readonly Finding[], meta: ReportMeta): string 
   lines.push("| Boyut | Skor /10 | Bulgu | P0 | P1 |");
   lines.push("|-------|:--------:|:-----:|:--:|:--:|");
   for (const r of rows) {
-    const score = r.score === null ? "n/d" : r.score.toFixed(1);
-    lines.push(`| ${r.dimension} | ${score} | ${r.findings} | ${r.p0} | ${r.p1} |`);
+    lines.push(`| ${r.dimension} | ${scoreCell(r.score, r.status)} | ${r.findings} | ${r.p0} | ${r.p1} |`);
   }
   lines.push(`| **Genel** | **${overall === null ? "n/d" : overall.toFixed(1)}** | ${findings.length} | ${counts.P0} | ${counts.P1} |`);
   lines.push("");
-  lines.push("_\"n/d\": bu boyut bu çalışmada değerlendirilmedi (modül çalışmadı)._");
+  lines.push(
+    '_"kapsam dışı": modül çalıştı ama denetlenecek somut bir yüzey bulamadı — bu **temiz demek değildir**, ' +
+      '"kontrol edilecek bir şey yoktu" demektir. "n/d": modül hiç çalışmadı. ' +
+      '"⚠ hata": modül çöktü, bu boyut **denetlenmedi**. Hiçbiri genel ortalamaya girmez._',
+  );
   lines.push("");
+
+  // Kapsam Beyanı — bulgu listesinden ÖNCE gelir. "0 bulgu" ancak kapsamla birlikte okunursa
+  // anlamlıdır; sonuna eklenseydi kimse okumadan "temiz" sonucuna varırdı.
+  if (meta.coverage) lines.push(...renderCoverageSection(meta.coverage));
 
   // Uyum özeti (PCI-DSS / Privacy / ASVS checklist'leri)
   const lists = allChecklists(meta);
@@ -246,7 +364,7 @@ function renderReportMd(findings: readonly Finding[], meta: ReportMeta): string 
 }
 
 function renderFindingsJson(findings: readonly Finding[], meta: ReportMeta): string {
-  const rows = buildScoreboard(findings, meta.ranModules);
+  const rows = buildScoreboard(findings, meta.ranModules, meta.coverage);
   const delta = computeDelta(meta.previous ?? null, findings);
   return JSON.stringify(
     {
@@ -260,7 +378,13 @@ function renderFindingsJson(findings: readonly Finding[], meta: ReportMeta): str
         overallScore: overallScore(rows),
         parityScore: parityScoreOf(meta),
         maxCvss: findings.reduce((m, f) => Math.max(m, f.cvss ?? 0), 0),
+        // CI gate'i ve dış tüketiciler skoru kapsamla birlikte okuyabilsin: dar kapsamda
+        // yüksek skor, geniş kapsamda yüksek skorla aynı şey değildir.
+        fileCoveragePercent: meta.coverage?.fileCoveragePercent ?? null,
+        modulesAudited: meta.coverage?.modules.filter((m) => m.status === "audited").length ?? null,
+        modulesFailed: meta.coverage?.modules.filter((m) => m.status === "failed").length ?? null,
       },
+      coverage: meta.coverage ?? null,
       checklists: allChecklists(meta),
       delta: {
         isFirstRun: delta.isFirstRun,
@@ -361,7 +485,7 @@ export function writeReport(findings: readonly Finding[], meta: ReportMeta): Rep
   writeFileSync(paths.findingsJson, renderFindingsJson(findings, meta), "utf8");
 
   // history.jsonl — trend için her çalışmadan tek satır.
-  const rows = buildScoreboard(findings, meta.ranModules);
+  const rows = buildScoreboard(findings, meta.ranModules, meta.coverage);
   const delta = computeDelta(meta.previous ?? null, findings);
   appendFileSync(
     paths.history,

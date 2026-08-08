@@ -37,6 +37,10 @@ interface Parsed {
   noLaunch: boolean;
   /** --since <git-ref> — taramayı bu referanstan bu yana değişen dosyalarla sınırla (diff-scope). */
   since: string | null;
+  /** --max-depth <n> — dizin derinliği sınırını yükselt (varsayılan 6). */
+  maxDepth: number | null;
+  /** --max-files <n> — ağaç yürüyüşünde dosya sayısı tavanını yükselt (varsayılan 2000). */
+  maxFiles: number | null;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -58,6 +62,8 @@ function parseArgs(argv: readonly string[]): Parsed {
   let noPanel = false;
   let noLaunch = false;
   let since: string | null = null;
+  let maxDepth: number | null = null;
+  let maxFiles: number | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--target" || a === "-t") {
@@ -81,12 +87,18 @@ function parseArgs(argv: readonly string[]): Parsed {
     } else if (a === "--since") {
       const v = args[++i];
       if (v) since = v;
+    } else if (a === "--max-depth") {
+      const v = Number.parseInt(args[++i] ?? "", 10);
+      if (Number.isFinite(v) && v > 0) maxDepth = v;
+    } else if (a === "--max-files") {
+      const v = Number.parseInt(args[++i] ?? "", 10);
+      if (Number.isFinite(v) && v > 0) maxFiles = v;
     } else if (a === "--no-panel") noPanel = true;
     else if (a === "--no-launch") noLaunch = true;
     else if (a === "--help" || a === "-h") help = true;
     else if (a === "--version" || a === "-v") version = true;
   }
-  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint, noPanel, noLaunch, since };
+  return { command, target, help, version, failOn, interval, once, modules, severity, fingerprint, noPanel, noLaunch, since, maxDepth, maxFiles };
 }
 
 /**
@@ -129,6 +141,7 @@ function scanOptionsFor(
   intent: "scan" | "pentest",
   moduleIds: readonly ModuleId[] | null,
   since: string | null = null,
+  limits: { maxDepth: number | null; maxFiles: number | null } = { maxDepth: null, maxFiles: null },
 ) {
   const modules = resolveModules(moduleIds);
   return {
@@ -136,6 +149,8 @@ function scanOptionsFor(
     intent,
     ...(modules ? { modules } : {}),
     ...(since ? { since } : {}),
+    ...(limits.maxDepth !== null ? { maxDepth: limits.maxDepth } : {}),
+    ...(limits.maxFiles !== null ? { maxFiles: limits.maxFiles } : {}),
   };
 }
 
@@ -167,6 +182,11 @@ Seçenekler:
                         ve yeni (untracked) dosyalar da kapsama girer. PR/CI için hızlıdır.
                         ⚠ KISMİ sonuç: tam postür değildir. findings.json ve history.jsonl
                         güncellenmez, delta hesaplanmaz — tam postür kaydı korunur.
+  --max-depth <n>      Dizin derinliği sınırı (varsayılan 6). Derin monorepo'larda gerekir:
+                        apps/web/src/app/(dashboard)/admin/page.tsx 7. seviyededir ve
+                        varsayılanla HİÇ taranmaz. Raporun Kapsam Beyanı bölümü kesilen
+                        dizinleri listeler — orada satır görüyorsan bu bayrağı yükselt.
+  --max-files <n>      Ağaç yürüyüşünde dosya sayısı tavanı (varsayılan 2000).
   --no-panel           init: security-knight panelini hiç kopyalama (yalnızca skill kurulur).
   --no-launch          init: paneli kopyala ama başlatma/tarayıcıyı açma (ör. CI/otomasyon).
 
@@ -176,6 +196,37 @@ Seçenekler:
 function printBanner(): void {
   process.stdout.write(`\nWarden ${WARDEN_VERSION} — savunma amaçlı öz-denetim\n`);
   process.stdout.write("⛔ Varsayılan PASİF/read-only. Aktif test yalnızca yetki kapısı açıkken.\n\n");
+}
+
+/**
+ * KAPSAM BEYANI — terminalde, bulgu sayısının hemen ardından.
+ *
+ * Buradaki amaç "0 bulgu" satırının tek başına okunmasını engellemek. Kapsam kaybı varsa
+ * kullanıcı bunu raporu açmadan, tarama biter bitmez görmeli — çünkü asıl karar
+ * ("temiz mi?") o anda veriliyor.
+ */
+function printCoverage(res: ScanResult): void {
+  const cov = res.coverage;
+  const failed = cov.modules.filter((m) => m.status === "failed");
+  const absent = cov.modules.filter((m) => m.status === "surface-absent");
+  const audited = cov.modules.filter((m) => m.status === "audited");
+
+  const pct = cov.fileCoveragePercent;
+  process.stdout.write(
+    `\nKapsam: ${cov.filesScanned} dosya tarandı` +
+      (cov.filesSkipped > 0 ? `, ${cov.filesSkipped} atlandı${pct === null ? "" : ` (≈%${pct.toFixed(1)})`}` : "") +
+      ` · modül: ${audited.length} denetlendi, ${absent.length} kapsam dışı, ${failed.length} hata\n`,
+  );
+
+  // Çöken modül = denetlenmemiş boyut. Bu, sessiz kalması en tehlikeli bilgidir.
+  if (failed.length > 0) {
+    process.stdout.write(`🔴 DENETLENMEDİ (modül hata verdi): ${failed.map((m) => m.module).join(", ")}\n`);
+    for (const m of failed) process.stdout.write(`  • ${m.module}: ${m.reason ?? "bilinmeyen hata"}\n`);
+  }
+  for (const l of cov.limits) {
+    process.stdout.write(`⚠ ${l.detail} (${l.count})\n`);
+    if (l.samples.length > 0) process.stdout.write(`    ör. ${l.samples.slice(0, 3).join(", ")}\n`);
+  }
 }
 
 function printSummary(res: ScanResult): void {
@@ -204,6 +255,8 @@ function printSummary(res: ScanResult): void {
   process.stdout.write(`Çalışan modül: ${res.ranModules.size === 0 ? "yok" : [...res.ranModules].join(", ")}\n`);
   const maxCvss = res.findings.reduce((m, f) => Math.max(m, f.cvss ?? 0), 0);
   if (maxCvss > 0) process.stdout.write(`En yüksek CVSS v4: ${maxCvss.toFixed(1)}\n`);
+
+  printCoverage(res);
 
   const parity = res.artifacts.get("A") as ParityResult | undefined;
   if (parity) {
@@ -273,7 +326,7 @@ async function main(): Promise<number> {
       return 0;
     }
     case "scan": {
-      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules, p.since));
+      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules, p.since, p));
       warnIfScopeDropped(p.since, res);
       printSummary(res);
       return gateExit(res, p.failOn);
@@ -285,14 +338,14 @@ async function main(): Promise<number> {
         for (const r of authz.reasons) process.stdout.write(`  • ${r}\n`);
         process.stdout.write("\n");
       }
-      const res = await runScan(scanOptionsFor(p.target, "pentest", p.modules, p.since));
+      const res = await runScan(scanOptionsFor(p.target, "pentest", p.modules, p.since, p));
       warnIfScopeDropped(p.since, res);
       printSummary(res);
       return gateExit(res, p.failOn);
     }
     case "report": {
       if (p.since) process.stderr.write("⚠ --since yalnızca scan/pentest ile geçerli; report tam tarama yapar.\n");
-      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
+      const res = await runScan(scanOptionsFor(p.target, "scan", p.modules, null, p));
       printSummary(res);
       return gateExit(res, p.failOn);
     }
@@ -305,7 +358,7 @@ async function main(): Promise<number> {
       for (;;) {
         tick++;
         process.stdout.write(`\n── monitor #${tick} · ${new Date().toISOString()} ──\n`);
-        const res = await runScan(scanOptionsFor(p.target, "scan", p.modules));
+        const res = await runScan(scanOptionsFor(p.target, "scan", p.modules, null, p));
         printSummary(res);
         if (p.once) return gateExit(res, p.failOn);
         process.stdout.write(`\n(sonraki tarama ${p.interval}s sonra; durdurmak için Ctrl+C)\n`);

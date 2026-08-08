@@ -162,8 +162,9 @@ export const apiModule: WardenModule = {
     return collectApiData(ctx.fs).usesApi;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeApi(collectApiData(ctx.fs));
-    ctx.audit.info(`API: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectApiData(ctx.fs);
+    const findings = analyzeApi(data);
+    ctx.audit.info(`API: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

@@ -194,8 +194,9 @@ export const flowModule: WardenModule = {
     return collectFlowData(ctx.fs).usesWeb;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeFlow(collectFlowData(ctx.fs));
-    ctx.audit.info(`FLOW: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectFlowData(ctx.fs);
+    const findings = analyzeFlow(data);
+    ctx.audit.info(`FLOW: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

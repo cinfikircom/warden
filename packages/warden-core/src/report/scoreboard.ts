@@ -1,9 +1,21 @@
 import type { Finding, ModuleId } from "../model/finding.ts";
 import type { Severity } from "../model/severity.ts";
+import type { CoverageManifest, ModuleStatus } from "./coverage.ts";
 
 /**
  * Skor tablosu (iş emri §5): her denetim boyutu /10. Referans: canliya_alma.md puan tablosu.
  * Değerlendirilmeyen (çalışmayan) modüller "n/d" olarak işaretlenir — sıfır puanla karıştırılmaz.
+ *
+ * v0.12 — "kapsam dışı" üçüncü durumu:
+ *
+ * Eskiden yalnızca iki durum vardı: puan ya da "n/d". Bu, en yanıltıcı hâli üretiyordu —
+ * `applicable()` gevşek olduğu için bir modül çalışıp hiç yüzey bulamasa bile 10.0/10 alıyordu.
+ * Bu repoda 17 boyuttan 11'i böyle 10.0 aldı; oysa Warden'ın HTTP API'si, ödemesi, oturumu,
+ * dosya yüklemesi yok. Yani o puanlar "kontrol ettim, temiz" değil, "kontrol edilecek bir şey
+ * yoktu" anlamına geliyordu ve rapor ikisini ayırt etmiyordu.
+ *
+ * Artık modül kendi yüzey sayısını bildiriyorsa (`ModuleRunResult.surface`) ve o sayı 0'sa,
+ * boyut puan yerine "kapsam dışı" görünür ve GENEL ORTALAMAYA GİRMEZ.
  */
 
 export interface ScoreRow {
@@ -14,6 +26,10 @@ export interface ScoreRow {
   readonly findings: number;
   readonly p0: number;
   readonly p1: number;
+  /** Bu boyutun neden puanlı/puansız olduğu. Rapor bunu puanın yerine yazar. */
+  readonly status: ModuleStatus;
+  /** İnsan-okunur gerekçe (yalnızca puansız satırlarda). */
+  readonly note: string | null;
 }
 
 export const DIMENSIONS: Record<ModuleId, string> = {
@@ -46,17 +62,53 @@ const PENALTY: Record<Severity, number> = { P0: 5, P1: 2.5, P2: 1, P3: 0.25 };
  * Verilen bulgulardan ve çalışan modül kümesinden skor tablosu üretir.
  * @param ranModules Gerçekten çalışan modüller. Burada olmayan modül "n/d".
  */
-export function buildScoreboard(findings: readonly Finding[], ranModules: ReadonlySet<ModuleId>): ScoreRow[] {
+export function buildScoreboard(
+  findings: readonly Finding[],
+  ranModules: ReadonlySet<ModuleId>,
+  coverage?: CoverageManifest,
+): ScoreRow[] {
+  const byModule = new Map(coverage?.modules.map((m) => [m.module, m]) ?? []);
   const rows: ScoreRow[] = [];
+
   for (const module of Object.keys(DIMENSIONS) as ModuleId[]) {
     const dimension = DIMENSIONS[module];
     const own = findings.filter((f) => f.module === module);
+    const cov = byModule.get(module);
+
     // Boyut, modülü çalıştıysa VEYA o boyuta ait bulgu varsa değerlendirilir (ör. içe-aktarılan
     // DAST/IaC bulguları kendi boyutunda; SAST'ın ürettiği FE bulguları FE boyutunda).
     if (!ranModules.has(module) && own.length === 0) {
-      rows.push({ module, dimension, score: null, findings: 0, p0: 0, p1: 0 });
+      rows.push({
+        module,
+        dimension,
+        score: null,
+        findings: 0,
+        p0: 0,
+        p1: 0,
+        status: cov?.status ?? "not-run",
+        note: cov?.reason ?? "Bu boyut bu çalışmada değerlendirilmedi.",
+      });
       continue;
     }
+
+    // Modül çalıştı ama tek bir gerçek yüzey öğesi bulamadı → puan verilmez.
+    //
+    // Bulgu VARSA bu kural uygulanmaz: bulgu, yüzeyin var olduğunun kesin kanıtıdır ve
+    // başka bir modülden (ör. SARIF içe-aktarımı) gelmiş olabilir.
+    if (own.length === 0 && (cov?.status === "surface-absent" || cov?.status === "failed")) {
+      rows.push({
+        module,
+        dimension,
+        score: null,
+        findings: 0,
+        p0: 0,
+        p1: 0,
+        status: cov.status,
+        note: cov.reason,
+      });
+      continue;
+    }
+
     let score = 10;
     let p0 = 0;
     let p1 = 0;
@@ -72,6 +124,8 @@ export function buildScoreboard(findings: readonly Finding[], ranModules: Readon
       findings: own.length,
       p0,
       p1,
+      status: "audited",
+      note: null,
     });
   }
   return rows;

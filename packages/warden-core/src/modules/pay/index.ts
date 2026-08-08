@@ -341,8 +341,9 @@ export const payModule: WardenModule = {
     return collectPayData(ctx.fs).usesPayments;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzePay(collectPayData(ctx.fs));
-    ctx.audit.info(`PAY: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectPayData(ctx.fs);
+    const findings = analyzePay(data);
+    ctx.audit.info(`PAY: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

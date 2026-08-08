@@ -110,8 +110,9 @@ export const aiModule: WardenModule = {
     return collectAiData(ctx.fs).usesAi;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeAi(collectAiData(ctx.fs));
-    ctx.audit.info(`AI: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectAiData(ctx.fs);
+    const findings = analyzeAi(data);
+    ctx.audit.info(`AI: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };

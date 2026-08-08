@@ -2,6 +2,7 @@ import type { Finding, ModuleId } from "./finding.ts";
 import type { AuthzResult } from "../authz/gate.ts";
 import type { AuditLog } from "../audit/log.ts";
 import type { DetectContext } from "../detect/types.ts";
+import type { CoverageCollector } from "../report/coverage.ts";
 
 /**
  * Bir denetim modülünün çalışması için verilen bağlam.
@@ -18,6 +19,11 @@ export interface ScanContext {
   readonly stack: StackInfo;
   /** READ-ONLY dosya erişimi. */
   readonly fs: DetectContext;
+  /**
+   * Kapsam toplayıcı — modüller buraya "şunu göremedim" bilgisini yazar.
+   * Opsiyonel: doğrudan `ScanContext` kuran testler ve gömen çağrı yolları etkilenmesin diye.
+   */
+  readonly coverage?: CoverageCollector | undefined;
 }
 
 export interface StackInfo {
@@ -45,6 +51,19 @@ export const EMPTY_STACK: StackInfo = {
 export interface ModuleRunResult {
   readonly findings: readonly Finding[];
   readonly artifact?: unknown;
+  /**
+   * Bu modülün gerçekte incelediği YÜZEY ÖĞESİ sayısı — ör. PAY için bulunan ödeme çağrısı,
+   * UPLOAD için bulunan yükleme handler'ı, ACCESS için bulunan route.
+   *
+   * Neden gerekli: `applicable()` gevşek bir ön elemedir. Bir modül "uygulanabilir" görünüp
+   * hiçbir gerçek yüzey bulamayabilir — o zaman 0 bulgu üretir ve skor tablosunda **10.0/10**
+   * alır. Bu, "kontrol ettim, temiz" ile "kontrol edilecek bir şey yoktu"yu aynı gösterir ve
+   * kullanıcıya hak etmediği güveni verir.
+   *
+   * `surface: 0` bildiren bir modül skor tablosunda puan yerine **"kapsam dışı"** görünür.
+   * Bildirmeyen modüller (alan `undefined`) eski davranışı korur — kademeli geçiş için.
+   */
+  readonly surface?: number;
 }
 
 /**

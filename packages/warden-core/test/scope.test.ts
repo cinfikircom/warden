@@ -92,7 +92,7 @@ describe("resolveGitScope", () => {
 describe("createFsContext — kapsam filtresi", () => {
   it("find() yalnızca kapsamdaki dosyaları döndürür", () => {
     const scope = resolveGitScope(repo, "HEAD~1").scope;
-    const fs = createFsContext(repo, scope?.paths);
+    const fs = createFsContext(repo, { scopePaths: scope?.paths });
     const bulunan = fs.find((p) => p.endsWith(".ts"));
     expect(bulunan).toContain("src/eski.ts");
     expect(bulunan).toContain("src/yeni.ts");
@@ -111,14 +111,14 @@ describe("createFsContext — kapsam filtresi", () => {
    */
   it("exists() ve readFile() kapsamdan ETKİLENMEZ", () => {
     const scope = resolveGitScope(repo, "HEAD~1").scope;
-    const fs = createFsContext(repo, scope?.paths);
+    const fs = createFsContext(repo, { scopePaths: scope?.paths });
     expect(scope?.paths.has("src/degismeyen.ts")).toBe(false);
     expect(fs.exists("src/degismeyen.ts")).toBe(true);
     expect(fs.readFile("src/degismeyen.ts")).toContain("export const b");
   });
 
   it("boş kapsam → find() hiçbir şey bulmaz", () => {
-    const fs = createFsContext(repo, new Set<string>());
+    const fs = createFsContext(repo, { scopePaths: new Set<string>() });
     expect(fs.find(() => true)).toHaveLength(0);
   });
 });

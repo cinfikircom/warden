@@ -49,6 +49,26 @@ export const importsModule: WardenModule = {
       ctx.audit.info(`İçe-aktarıldı: ${file} → ${findings.length - before} bulgu.`);
     }
 
+    /*
+     * SARIF, kapsam kanıtını TAŞIMAZ — beyan edilmesi gereken yapısal bir boşluk.
+     *
+     * SARIF 2.1.0 yalnızca ihlalleri (`results[]`) aktarır: geçen kontroller, ayrıştırılamayan
+     * dosyalar, taranan kaynak sayısı ve `invocations` pratikte dışarıda kalır. Somut ölçüm
+     * (Checkov 3.3.9): 42 kontrol değerlendirilmiş, SARIF'e yalnızca 17 sonuç yazılmış — yani
+     * PAYDA kayboluyor. Dahası bazı araçlarda kontrol atlamak sessizdir: Checkov'da
+     * `--skip-check CKV_X` o kontrolü passed/failed/skipped listelerinin HİÇBİRİNE koymaz.
+     *
+     * Sonuç: içe-aktarılan bir bulgu kümesi için "bu araç neyi tarayamadı" sorusu
+     * cevaplanamaz. Warden bunu kendi kapsam yüzdesine karıştırmaz ve gizlemez — beyan eder.
+     */
+    if (files.length > 0) {
+      ctx.coverage?.unmeasured(
+        `Harici araç raporu içe aktarıldı (${files.length} dosya). SARIF/OSV yalnızca ihlalleri ` +
+          "taşır; o araçların hangi dosyaları tarayamadığı veya hangi kontrolleri atladığı " +
+          "bilinemez — bu bulgular kapsam yüzdesine dahil DEĞİLDİR.",
+      );
+    }
+
     // Opsiyonel: osv-scanner kuruluysa canlı çalıştır (çok-ekosistem SCA).
     if (osvEnabled()) {
       const osv = runOsvScanner(ctx.projectRoot, ctx.audit);

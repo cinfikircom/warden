@@ -131,8 +131,9 @@ export const emailModule: WardenModule = {
     return collectEmailData(ctx.fs).usesMail;
   },
   async run(ctx: ScanContext): Promise<ModuleRunResult> {
-    const findings = analyzeEmail(collectEmailData(ctx.fs));
-    ctx.audit.info(`EMAIL: ${findings.length} bulgu.`);
-    return { findings };
+    const data = collectEmailData(ctx.fs);
+    const findings = analyzeEmail(data);
+    ctx.audit.info(`EMAIL: ${findings.length} bulgu (${data.files.length} yüzey dosyası).`);
+    return { findings, surface: data.files.length };
   },
 };
