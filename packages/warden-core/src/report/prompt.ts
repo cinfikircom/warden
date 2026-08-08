@@ -1,6 +1,7 @@
 import type { Finding } from "../model/finding.ts";
 import type { Severity } from "../model/severity.ts";
 import { maskSecrets } from "../secret/mask.ts";
+import { fpHintsFor } from "../risk/false-positives.ts";
 
 /**
  * Bir bulgunun ajana devredilebilir (kopyala-yapıştır ya da doğrudan dispatch) saf temsili.
@@ -19,6 +20,8 @@ export interface FindingPrompt {
   readonly impact: string;
   readonly locations: readonly string[];
   readonly recommendation: string;
+  /** "Bu bulgu hangi durumlarda yanlış pozitiftir" notları (risk/false-positives.ts). */
+  readonly verifyFirst: readonly string[];
   readonly confidence: Finding["confidence"];
   readonly autoFixable: boolean;
   readonly effort: Finding["effort"];
@@ -39,6 +42,7 @@ export function buildFindingPrompt(f: Finding): FindingPrompt {
     impact: maskSecrets(f.impact),
     locations: f.evidence.length > 0 ? f.evidence.map((e) => `${e.source}${e.location ? `:${e.location}` : ""}`) : [],
     recommendation: maskSecrets(f.recommendation),
+    verifyFirst: fpHintsFor(f),
     confidence: f.confidence,
     autoFixable: f.autoFixable,
     effort: f.effort,
@@ -63,6 +67,13 @@ export function renderFindingPromptMd(p: FindingPrompt): string {
   }
   lines.push(`Adımlar:`);
   lines.push(`  1) Yukarıdaki konum(lar)ı aç ve sorunu doğrula.`);
+  if (p.verifyFirst.length > 0) {
+    // Körlemesine düzeltme, gereksiz değişiklik ve gerçek riskin gözden kaçması demektir.
+    // Warden satır-bazlı tarar; bu notlar tarayıcının göremediği bağlamı ajana/insana verir.
+    lines.push(`     ÖNCE DOĞRULA — bu bulgu şu durumlarda GEÇERSİZDİR:`);
+    for (const h of p.verifyFirst) lines.push(`       · ${h}`);
+    lines.push(`     Yukarıdakilerden biri geçerliyse düzeltme YAPMA; \`.warden-ignore.yml\` ile gerekçeli waiver yaz.`);
+  }
   lines.push(`  2) Şu yaklaşımı uygula: ${p.recommendation}`);
   lines.push(`  3) Aynı sınıftaki diğer örnekleri de tara (grep ile yaygınlaştır).`);
   lines.push(`Test/Kabul:`);

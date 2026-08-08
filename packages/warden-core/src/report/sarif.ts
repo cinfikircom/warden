@@ -30,6 +30,9 @@ function fileEvidence(f: Finding): Array<{ uri: string; startLine?: number }> {
     });
 }
 
+/** SARIF taksonomi bildirimi için sabit GUID (CWE resmi taksonomisi). */
+const CWE_TAXONOMY_GUID = "25F72D7E-8A92-459D-AD67-64853F788765";
+
 export function toSarif(findings: readonly Finding[], wardenVersion: string): string {
   // Kurallar: benzersiz check başına bir rule.
   const ruleMap = new Map<string, Finding>();
@@ -41,8 +44,26 @@ export function toSarif(findings: readonly Finding[], wardenVersion: string): st
     shortDescription: { text: f.category },
     fullDescription: { text: maskSecrets(f.impact) },
     defaultConfiguration: { level: LEVEL[f.severity] },
-    properties: { tags: [f.module, ...(f.references ?? [])] },
+    properties: {
+      tags: [f.module, ...(f.cwe ? [f.cwe] : []), ...(f.references ?? [])],
+      ...(f.cwe ? { "security-severity-cwe": f.cwe } : {}),
+    },
+    // SARIF `relationships` ile CWE taksonomisine bağla — GitHub Code Scanning ve Azure
+    // DevOps bunu okuyup bulguyu CWE kategorisinde gösterir.
+    ...(f.cwe
+      ? {
+          relationships: [
+            {
+              target: { id: f.cwe.replace("CWE-", ""), toolComponent: { name: "CWE", guid: CWE_TAXONOMY_GUID } },
+              kinds: ["superset"],
+            },
+          ],
+        }
+      : {}),
   }));
+
+  // Kullanılan CWE'lerin taksonomi bildirimi.
+  const usedCwes = [...new Set(findings.map((f) => f.cwe).filter((c): c is string => c !== undefined))];
 
   const results = findings.map((f) => {
     const locs = fileEvidence(f);
@@ -88,6 +109,27 @@ export function toSarif(findings: readonly Finding[], wardenVersion: string): st
             rules,
           },
         },
+        // CWE taksonomisi: bulgular `relationships` ile buraya bağlanır. Tüketiciler
+        // (GitHub Code Scanning, Azure DevOps) zafiyetleri CWE kategorisinde gruplayabilir.
+        ...(usedCwes.length > 0
+          ? {
+              taxonomies: [
+                {
+                  name: "CWE",
+                  guid: CWE_TAXONOMY_GUID,
+                  organization: "MITRE",
+                  shortDescription: { text: "Common Weakness Enumeration" },
+                  informationUri: "https://cwe.mitre.org/",
+                  isComprehensive: false,
+                  taxa: usedCwes.map((c) => ({
+                    id: c.replace("CWE-", ""),
+                    guid: `warden-cwe-${c.replace("CWE-", "")}`,
+                    helpUri: `https://cwe.mitre.org/data/definitions/${c.replace("CWE-", "")}.html`,
+                  })),
+                },
+              ],
+            }
+          : {}),
         results,
       },
     ],
