@@ -353,3 +353,28 @@ söz bastırmasın) ve düşük güvenle işaretlenir.
 | **Taint / veri-akışı (dosya-içi)** | Kaynak (`req.body`, `location.hash`, `process.argv`…) → sink akışı izlenir; girdi ulaşıyorsa güven YÜKSELİR, temizlenmişse düşer, **bulunamazsa hiç dokunulmaz** (asimetrik: motorun negatif kararı güvenilir değil). 23 sink kuralı. Fonksiyonlar/dosyalar arası akış izlenmez | + | ✅ |
 | **Diff-scope tarama** | `--since <git-ref>`: yalnızca değişen dosyalar (commit'siz düzenlemeler + untracked dahil). Kısmi sonuç `findings.json`/`history.jsonl`'e YAZILMAZ, delta hesaplanmaz | + | ✅ |
 | **Waiver `path` selector'ı** | Yol glob'u (`*` / `**` / `?`) ile bastırma; bulgu ancak TÜM kanıtları glob'a uyarsa waive edilir, çıplak `**` reddedilir | + | ✅ |
+| **CWE eşlemesi + SARIF taksonomisi** | Her bulguya en spesifik child CWE (`risk/cwe.ts`); parent CWE'ler (74/20/200/284/693) testle yasak. SARIF `taxonomies` + `relationships` → GitHub Code Scanning CWE gruplaması | A | ✅ |
+| **Doğrulama notları (False Positives)** | Playbook'ta her bulgunun altında "bu şu durumlarda GEÇERSİZDİR" listesi (`risk/false-positives.ts`) — körlemesine düzeltmeyi engeller, waiver gerekçesi verir | A | ✅ |
+| **Rule Packs** | `warden-rules/*.yml` bildirimsel kurallar. Dört güvenlik kısıtı testle zorlanır: `validate` YAML'dan gelemez (RCE), iç içe niceleyici reddedilir (ReDoS), `g` bayrağı çıkarılır, harici kural varsayılan `low` güven | B | ✅ |
+| **Kapsam Beyanı (Coverage Manifest)** | Rapor artık "neyi göremedim"i de yazar: derinlik/dosya-sayısı/dosya-boyutu/kural-tavanı kesmeleri, çöken modüller, yüzey bulamayan modüller. Skor tablosuna **"kapsam dışı"** durumu eklendi — yüzey bulamayan modül 10.0 yerine bunu alır ve ortalamaya girmez. `--max-depth` / `--max-files` ile sınırlar açılabilir | A | ✅ |
+
+### Henüz yapılmayanlar (docs/DURUM-VE-GELECEK.md)
+
+Bu tablonun tamamı ✅ olduğu sürece kendisi bir kör noktaydı: eksikler hiçbir yerde
+envanterlenmiyordu. Aşağıdakiler bilinen ve planlı boşluklardır.
+
+| Yetenek | Neden gerekli | Faz | Durum |
+|---------|---------------|:---:|:-----:|
+| **Recall benchmark** | 397 testin hepsi kendi fixture'ımıza karşı — "kuralım çalışıyor"u kanıtlar, "kaçırmadım"ı değil. Juice Shop / OWASP Benchmark üzerinde ölçülmeli | A | ⏳ |
+| **Endpoint envanteri** | Koddan gerçek route listesi (Express/Next/FastAPI/Django/Laravel/Spring). DAST'ın 11 sabit yol yerine gerçek yüzeyi denemesinin ön koşulu | B | ⏳ |
+| **`web-tree-sitter` AST katmanı** | Saf WASM, opsiyonel peer. Çok satırlı ifadeler, yorum/ölü kod ayrımı; Ruby, Java, Rust, Kotlin bugün **0 dile özgü kurala** sahip | B | ⏳ |
+| **Fonksiyonlar/dosyalar arası taint** | Bugünkü taint dosya-içi; `controller → service → repository` zincirini izleyemediği için gerçek projelerde çoğunlukla susuyor | B | ⏳ |
+| **Altyapı katmanı** | `Dockerfile`, CI workflow'ları, `.husky/`, nginx conf ve **`dist/` bundle** hiç taranmıyor — sonuncusu üretime giden asıl artefakt | B | ⏳ |
+| **Oturumlu DAST** | `warden.authz.yml`'a `session:` bloğu + POST/PUT/DELETE + redirect + crawl. Bugün login arkasındaki her şey görünmez | C | ⏳ |
+| **Proof Engine** | "Muhtemelen IDOR var" yerine iki hesapla doğrulanmış `confidence: proven` | C | ⏳ |
+| **`warden observe` (IAST)** | Çalışan sürece bağlanıp gerçek endpoint/env/dış-host/SQL gözlemi. "Localde çalışan yazılım" hedefinin tam karşılığı | C | ⏳ |
+| **`@warden/browser`** | Playwright ayrı paket: SPA render, gerçek DOM-XSS doğrulaması, ekran görüntülü kanıt | C | ⏳ |
+| **Saldırı Yüzeyi Grafı** | 18 modül birbirinden habersiz; `endpoint → handler → sorgu → tablo → PII` grafı zincir sorularını mümkün kılar | D | ⏳ |
+| **Çok dilli SCA** | CVE taraması yalnızca npm/pnpm; Python, PHP, Go, .NET, Ruby, Java kapsam dışı. `yarn.lock` desteklenmiyor | B | ⏳ |
+| **Paralel + önbellekli orkestrasyon** | 18 modül sırayla koşuyor, her biri ağacı baştan yürüyor, aynı dosya defalarca okunuyor | D | ⏳ |
+| **Modül başına zaman aşımı** | Yok; patolojik bir regex (ReDoS) tüm taramayı süresiz kilitleyebilir | D | ⏳ |

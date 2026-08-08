@@ -106,7 +106,7 @@ mevcut. Böylece AST kazancı K2'yi kırmadan elde edilir.
 Neden §1.2'den sonra: taint katmanı AST varsa AST'den, yoksa regex'ten beslenecek şekilde
 arkasına gizlenir. Önce arayüz, sonra motor.
 
-### 1.4 Rule Packs (harici kural paketleri) ⏳ · risk: düşük
+### 1.4 Rule Packs (harici kural paketleri) ✅ · risk: düşük · v0.12 — uygulama: §1.9
 
 **Strix'te:** skill/kural sistemi ile kapsam genişletme.
 
@@ -126,6 +126,107 @@ birleşiminden** türer: kural eşleşmesi + taint erişimi + reachability + KEV
 sinyal onaylıyorsa `confidence: high`, yalnız kural eşleşmesi varsa `low`.
 
 Bu zaten §1.2 ile geliyor; ayrı bir iş kalemi değil, taint'in raporlamaya yansıması.
+
+---
+
+### 1.6 DAST yol kataloğu — 11 → 43 yol ✅ · risk: düşük · v0.12
+
+**Strix'te:** `skills/vulnerabilities/information_disclosure.md` ve `path_traversal_lfi_rfi.md`
+içinde "High-Value Surfaces" başlığı altında toplanmış açıkta-kalan-dosya yüzeyleri.
+
+**Warden'da:** `modules/dast/exposed.ts` içindeki `EXPOSED_PATHS` kataloğu genişletildi.
+Eklenen sınıflar: ortam dosyası varyantları (`.env.local/.production/.bak`), özel anahtarlar
+(SSH/TLS/GCP service-account), sürüm kontrolü ağaçları (`.git/index`, `.svn/wc.db`,
+`.hg/requires`), uygulama yapılandırması (`web.config`, `appsettings.json`, `settings.py`,
+`config.php`, `wp-config.php.bak`, `docker-compose.yml`, `.htaccess`), veritabanı dökümleri,
+ve debug yüzeyleri (`actuator/env`, `debug/pprof/`, `metrics`, `_profiler`, `phpinfo.php`,
+`server-status`).
+
+**Lisans:** Strix Apache-2.0. Alınanlar **olgusal veri** (standart dosya yolları) — telif
+kapsamında değil, dolayısıyla attribution yükümlülüğü doğmuyor. Yine de kaynak burada
+kaydedilir: Strix, OmniSecure Inc., Apache-2.0.
+
+**İki değişmez kural** (kod yorumunda da yazılı, testle korunuyor):
+
+1. **Her yolun içerik doğrulayıcısı olmalı.** SPA'lar ve catch-all router'lar her yola 200
+   döner; "200 döndü" hiçbir zaman tek başına bulgu değildir. `test/dast-exposed-paths.test.ts`
+   43 yolun tamamını SPA gövdesine, boş gövdeye ve 404'e karşı sınar.
+2. **Büyük/binary dump yolları katalogda yok** (`/actuator/heapdump`, `/debug/pprof/heap`,
+   `/actuator/threaddump`). Yüzlerce MB indirmek yetki kapısının "non-intrusive, düşük hacim"
+   vaadini bozardı. Bu, testle de zorlanıyor.
+
+**Maliyet:** hedef başına 43 GET; saniyede 2 istek sınırıyla ~17 saniye. Bilinçli denge.
+
+### 1.7 CWE eşlemesi ✅ · risk: düşük · v0.12
+
+**Strix'te:** `tools/reporting/tool.py` içinde küratörlü bir CWE listesi ve onunla gelen kural:
+*"en spesifik child CWE'yi kullan, parent'ı değil"* — yasaklı parent'lar 74, 20, 200, 284, 693.
+
+**Warden'da:** `risk/cwe.ts`. `Finding.cwe` alanı eklendi, `enrichCwe` zincire girdi ve SARIF
+çıktısı artık **CWE taksonomisi** bildiriyor (`taxonomies` + kural başına `relationships`) —
+GitHub Code Scanning ve Azure DevOps bulguları CWE kategorisinde gruplayabiliyor.
+
+Asıl değer parent yasağında: `CWE-74` ("Injection") SQL ile komut enjeksiyonunu aynı kutuya
+koyar ve düzeltmeyi yönlendirmez. Bu yüzden `FORBIDDEN_PARENTS` bir testle zorlanıyor — tabloya
+yanlışlıkla bir parent girerse test kırılır. Eşleşme bulunamazsa CWE **uydurulmaz**, boş kalır.
+
+Fingerprint'e girmez (K5): sonradan eklenmesi mevcut waiver ve delta geçmişini bozmaz.
+
+### 1.8 Doğrulama notları — "False Positives" ✅ · risk: düşük · v0.12
+
+**Strix'te:** her zafiyet dosyasında bir `## False Positives` bölümü; LLM'e "acele karar verme"
+demek için yazılmış.
+
+**Warden'da:** `risk/false-positives.ts` — deterministik karşılığı, bulguyu **sunarken sınırını
+da söylemek**. Remediation playbook'ta her bulgunun 1. adımının altına düşüyor:
+
+```
+  1) Yukarıdaki konum(lar)ı aç ve sorunu doğrula.
+     ÖNCE DOĞRULA — bu bulgu şu durumlarda GEÇERSİZDİR:
+       · Sorgu parametreli API ile çalışıyorsa (`?`, `$1`) enjeksiyon yoktur.
+       · Değer sabit bir allow-list'ten geliyorsa risk yoktur.
+     Yukarıdakilerden biri geçerliyse düzeltme YAPMA; gerekçeli waiver yaz.
+```
+
+Neden değerli: Warden'ın en büyük zaafı satır-bazlı regex'in bağlam körlüğü. Onu tamamen
+kapatmak AST + çağrı grafı ister (Faz B). Ama körlüğü **beyan etmek** bugün mümkün ve kullanıcıyı
+körlemesine düzeltmeden kurtarıyor — Kapsam Beyanı'nın bulgu düzeyindeki hâli. Notlar bulguyu
+bastırmaz, güveni düşürmez, fingerprint'e girmez.
+
+### 1.9 Rule Packs ✅ · risk: düşük · v0.12
+
+**Warden'da:** `warden-rules/*.yml`. Bildirimsel kurallar yerleşiklerin **yanına** eklenir,
+yerine geçmez — bir kural paketi yükleyerek Warden'ın kendi kontrollerini kapatmak mümkün değil.
+
+Dört güvenlik kısıtı, hepsi testle zorlanıyor:
+
+| Kısıt | Neden |
+|---|---|
+| `validate` YAML'dan **gelemez** | Fonksiyon olsaydı kural dosyası indirmek uzaktan kod çalıştırma yüzeyi olurdu — üstelik bir güvenlik aracında |
+| İç içe niceleyici içeren desen **reddedilir** | Kendi motorunu kilitleyebilen bir kural paketi kabul edilemez (ReDoS) |
+| `g`/`y` bayrakları **çıkarılır** | `test()` stateful olur ve dosyaları rastgele atlar (scanner.ts'te belgelenmiş tuzak) |
+| Harici kuralın güveni varsayılan **`low`** | Doğrulanmamış bir kuralın raporun başına çıkması yanlış olurdu |
+
+Geçersiz girdi **sessizce atlanmaz**: her ret audit log'a yazılır, ve dosya var ama hiç kural
+yüklenemediyse Kapsam Beyanı'na "o kontroller çalışmadı" satırı düşer.
+
+### 1.10 Strix'ten alınmayan kalan kalemler ⏳
+
+Devralma turu tamamlandı. Alınmayanlar ve gerekçeleri §2'de; bunlardan **Playwright** ve
+**Proof Engine** "ayrı, opsiyonel paket olarak alınmalı" diye karara bağlandı ama henüz
+yapılmadı (bkz. docs/DURUM-VE-GELECEK.md Faz C).
+
+Strix'in **payload katalogları** (XSS polyglot, path traversal, XXE) bilerek alınmadı: Warden
+onları gönderemez (K1/K3) ve yalnızca "kaynak kodda bu desen var mı" statik kontrolü olarak
+almak, mevcut sink kurallarının üstüne değer katmıyor.
+
+### 1.8 Kapsam Beyanı — Strix'te olmayan, Warden'a özgü ✅ · v0.12
+
+Bu madde devralma değil; incelemenin **yan ürünü**. Strix'in yeteneklerini Warden'ınkilerle
+karşılaştırırken asıl farkın kural sayısı değil, **kapsam bilgisi** olduğu görüldü: Warden
+neyi göremediğini bilmiyordu ve rapor "bakamadım" ile "baktım, temiz"i aynı gösteriyordu.
+
+Ayrıntı ve tasarım kararları: `docs/DURUM-VE-GELECEK.md` §9.
 
 ---
 
@@ -209,8 +310,26 @@ Sıra risk-artan ve fingerprint-nötr işleri öne alacak biçimde kuruldu.
 | 1b | Waiver `path` selector'ı + Warden self-match'leri | yok | düşük | ✅ |
 | 2 | Diff-scope tarama (`--since`) — §1.1 | yok | düşük | ✅ |
 | 3 | Taint katmanı (dosya-içi) — §1.2 + §1.5 | yok (yalnız `confidence`) | orta | ✅ |
-| 4 | Opsiyonel TypeScript AST — §1.3 | yok | orta | ⏳ |
-| 5 | Rule Packs — §1.4 | yeni kural = yeni bulgu | düşük | ⏳ |
+| 4 | Opsiyonel AST katmanı — §1.3 | yok | orta | ⏳ |
+| 5 | Rule Packs — §1.4 | yeni kural = yeni bulgu | düşük | ✅ |
+| 6 | DAST yol kataloğu 11→43 — §1.6 | yok (yalnız aktif tarama) | düşük | ✅ |
+| 7 | Kapsam Beyanı (Strix'te yok) | yok | düşük | ✅ |
+| 8 | CWE eşlemesi + SARIF taksonomisi — §1.7 | yok | düşük | ✅ |
+| 9 | Doğrulama notları (False Positives) — §1.8 | yok | düşük | ✅ |
+| 10 | Rule Packs — §1.9 | yeni kural = yeni bulgu | düşük | ✅ |
+
+### §1.3 hakkında düzeltme (v0.12)
+
+`ast-grep` reddi (§2.1) "platform-özel native binary" gerekçesine dayanıyordu ve
+`@ast-grep/napi` için bu **doğru**. Ancak gerekçe tüm AST seçeneklerine genellenmişti; oysa
+**`web-tree-sitter` saf WASM'dır** — 4,5 MB, platform-bağımsız, derleme adımı yok. K2'nin
+native-derleme itirazı buna uymuyor.
+
+Sonuç: §1.3'ün "yerleşik TypeScript AST'i" planı, yalnızca TS/JS'i çözdüğü için yetersiz
+kalıyor. Yerine `web-tree-sitter` opsiyonel peer olarak değerlendirilmeli — Ruby, Java, Rust,
+Kotlin bugün **sıfır dile özgü kurala** sahip ve TypeScript AST'i bunu çözmüyor. §2.1'in
+"kararı değiştirecek koşul" satırı (çok-dilli derin analiz gerçek bir gereksinim olursa)
+fiilen gerçekleşti.
 
 ### Sıra 1'in ortaya çıkardıkları (kayıt)
 
