@@ -1,0 +1,500 @@
+# DVWA — Damn Vulnerable Web Application (PHP) ground truth
+#
+# Kaynak: https://github.com/digininja/DVWA — klasik PHP eğitim uygulaması.
+#
+# DVWA KATMANLIDIR: her zafiyet low/medium/high/impossible seviyelerinde ayrı dosyada.
+# Bu envantere YALNIZCA `low` ve `medium` alındı. `impossible` dosyaları zafiyetin
+# DÜZELTİLMİŞ hâlidir; onları saymak tarayıcının recall'unu yapay olarak düşürürdü.
+#
+# Envanter kaynak kod okunarak çıkarıldı; `line` gerçek satır numarasıdır.
+
+target: dvwa
+repo: https://github.com/digininja/DVWA
+ref: master
+root: DVWA-master
+language: PHP
+
+vulnerabilities:
+  # ---------- SQL injection ----------
+  - file: vulnerabilities/sqli/source/low.php
+    line: 10
+    class: sql-injection
+    evidence: "SELECT ... WHERE user_id = '$id'"
+    note: "GET/POST id parametresi filtresiz tırnak içine gömülüyor."
+  - file: vulnerabilities/sqli/source/low.php
+    line: 31
+    class: sql-injection
+    evidence: "SQLite kolunda aynı ham interpolasyon"
+    note: "SQLite dalında da filtresiz."
+  - file: vulnerabilities/sqli/source/medium.php
+    line: 11
+    class: sql-injection
+    evidence: "WHERE user_id = $id (tırnaksız)"
+    note: "mysqli_real_escape_string tırnaksız sayısal bağlamda koruma sağlamaz."
+  - file: vulnerabilities/sqli/source/medium.php
+    line: 27
+    class: sql-injection
+    evidence: "SQLite, tırnaksız $id"
+    note: "MySQL escape'i SQLite sorgusunda anlamsız."
+  - file: vulnerabilities/sqli_blind/source/low.php
+    line: 11
+    class: sql-injection
+    evidence: "WHERE user_id = '$id'"
+    note: "Hata bastırıldığı için kör SQL injection; girdi filtresiz."
+  - file: vulnerabilities/sqli_blind/source/low.php
+    line: 32
+    class: sql-injection
+    evidence: "SQLite kolunda filtresiz interpolasyon"
+    note: "SQLite dalı da korumasız."
+  - file: vulnerabilities/sqli_blind/source/medium.php
+    line: 13
+    class: sql-injection
+    evidence: "WHERE user_id = $id"
+    note: "Escape edilmiş değer tırnaksız kullanılıyor."
+  - file: vulnerabilities/sqli_blind/source/medium.php
+    line: 34
+    class: sql-injection
+    evidence: "SQLite, escape yok"
+    note: "SQLite dalında escape hiç uygulanmıyor."
+  - file: vulnerabilities/brute/source/low.php
+    line: 12
+    class: sql-injection
+    evidence: "WHERE user = '$user' AND password = '$pass'"
+    note: "Login sorgusunda filtresiz girdi — auth bypass."
+  - file: vulnerabilities/bac/source/low.php
+    line: 80
+    class: sql-injection
+    evidence: "INSERT ... ('{$ip}')"
+    note: "X-Forwarded-For başlığı log INSERT sorgusuna filtresiz giriyor."
+  - file: vulnerabilities/bac/source/medium.php
+    line: 72
+    class: sql-injection
+    evidence: "INSERT ... ('{$ip}')"
+    note: "Aynı başlık enjeksiyonu medium seviyede de var."
+  - file: vulnerabilities/authbypass/change_user_details.php
+    line: 47
+    class: sql-injection
+    evidence: "UPDATE users SET first_name = '...' . $data->first_name"
+    note: "JSON gövdesinden gelen üç alan doğrudan UPDATE'e gömülüyor."
+
+  # ---------- Command injection ----------
+  - file: vulnerabilities/exec/source/low.php
+    line: 10
+    class: command-injection
+    evidence: "shell_exec('ping  ' . $target)"
+    note: "ip parametresi kabuk komutuna filtresiz ekleniyor."
+  - file: vulnerabilities/exec/source/low.php
+    line: 14
+    class: command-injection
+    evidence: "shell_exec('ping  -c 4 ' . $target)"
+    note: "*nix dalında da filtresiz."
+  - file: vulnerabilities/exec/source/medium.php
+    line: 19
+    class: command-injection
+    evidence: "shell_exec('ping  ' . $target)"
+    note: "Yalnızca && ve ; kara listede; | ve & ile bypass edilir."
+  - file: vulnerabilities/exec/source/medium.php
+    line: 23
+    class: command-injection
+    evidence: "shell_exec('ping  -c 4 ' . $target)"
+    note: "Aynı yetersiz kara liste."
+  - file: vulnerabilities/api/src/HealthController.php
+    line: 88
+    class: command-injection
+    evidence: "exec('ping -c 4 ' . $target, ...)"
+    note: "API JSON gövdesindeki target doğrudan exec() ile çalışıyor."
+
+  # ---------- XSS ----------
+  - file: vulnerabilities/xss_r/source/low.php
+    line: 8
+    class: xss
+    evidence: "'<pre>Hello ' . $_GET['name'] . '</pre>'"
+    note: "GET parametresi kodlanmadan HTML çıktısına yazılıyor."
+  - file: vulnerabilities/xss_r/source/medium.php
+    line: 11
+    class: xss
+    evidence: "<pre>Hello {$name}</pre>"
+    note: "Yalnızca literal <script> siliniyor; büyük harf veya onerror ile bypass."
+  - file: vulnerabilities/xss_s/source/low.php
+    line: 16
+    class: xss
+    evidence: "INSERT INTO guestbook ... '$message', '$name'"
+    note: "Girdi yalnızca SQL için escape ediliyor; stored XSS olarak saklanıyor."
+  - file: vulnerabilities/xss_s/source/medium.php
+    line: 14
+    class: xss
+    evidence: "str_replace('<script>', '', $name)"
+    note: "Tek kelimelik filtre; stored XSS mümkün."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 626
+    class: xss
+    evidence: "Name: {$name}<br />Message: {$comment}"
+    note: "Guestbook içeriği htmlspecialchars olmadan basılıyor (stored XSS sink)."
+  - file: vulnerabilities/xss_d/index.php
+    line: 53
+    class: xss
+    evidence: "document.write('<option value=' + lang + '>')"
+    note: "URL'den okunan lang değeri document.write ile DOM'a yazılıyor."
+  - file: vulnerabilities/xss_d/source/medium.php
+    line: 8
+    class: xss
+    evidence: "stripos($default, '<script')"
+    note: "Tek kara liste; </option></select><img onerror> ile bypass."
+  - file: vulnerabilities/csp/source/low.php
+    line: 15
+    class: xss
+    evidence: "<script src='\" . $_POST['include'] . \"'>"
+    note: "Kullanıcı kontrollü URL doğrudan script src olarak ekleniyor."
+  - file: vulnerabilities/csp/source/low.php
+    line: 3
+    class: xss
+    evidence: "CSP script-src ... pastebin.com hastebin.com cdn.jsdelivr.net"
+    note: "CSP allow-list'i keyfi içerik barındıran CDN'leri içeriyor — koruma yok."
+  - file: vulnerabilities/csp/source/medium.php
+    line: 16
+    class: xss
+    evidence: "$_POST['include'] doğrudan gövdeye"
+    note: "POST verisi kodlanmadan sayfaya gömülüyor."
+  - file: vulnerabilities/csp/source/medium.php
+    line: 3
+    class: xss
+    evidence: "CSP 'unsafe-inline' + sabit nonce"
+    note: "unsafe-inline ve statik nonce CSP'yi tamamen etkisizleştiriyor."
+  - file: vulnerabilities/csp/source/jsonp.php
+    line: 12
+    class: xss
+    evidence: "echo $callback . '(' . json_encode($outp) . ')'"
+    note: "JSONP callback parametresi doğrulanmadan yanıta yazılıyor."
+  - file: vulnerabilities/sqli/source/low.php
+    line: 20
+    class: xss
+    evidence: "ID: {$id} yansıtılıyor"
+    note: "Kullanıcı girdisi kodlanmadan yansıtılıyor."
+    confidence: low
+  - file: vulnerabilities/sqli/source/medium.php
+    line: 21
+    class: xss
+    evidence: "ID: {$id} yansıtılıyor"
+    note: "SQL escape HTML bağlamında koruma sağlamıyor."
+    confidence: low
+  - file: vulnerabilities/brute/source/low.php
+    line: 21
+    class: xss
+    evidence: "Welcome ... {$user}"
+    note: "username parametresi kodlanmadan yansıtılıyor."
+    confidence: low
+  - file: vulnerabilities/brute/source/medium.php
+    line: 23
+    class: xss
+    evidence: "Welcome ... {$user}"
+    note: "SQL escape var ama HTML kodlaması yok."
+    confidence: low
+  - file: vulnerabilities/bac/source/low.php
+    line: 90
+    class: xss
+    evidence: "Current Role: {$role}"
+    note: "user_role çerezinden gelen değer kodlanmadan basılıyor."
+  - file: vulnerabilities/authbypass/authbypass.js
+    line: 45
+    class: xss
+    evidence: "cell1.innerHTML = ... user['first_name']"
+    note: "API'den gelen değer innerHTML ile DOM'a yazılıyor."
+    confidence: low
+  - file: vulnerabilities/csrf/test_credentials.php
+    line: 24
+    class: xss
+    evidence: "Valid password for '{$user}'"
+    note: "POST username değeri kodlanmadan yansıtılıyor."
+    confidence: low
+
+  # ---------- CSRF ----------
+  - file: vulnerabilities/csrf/source/low.php
+    line: 3
+    class: csrf
+    evidence: "isset($_GET['Change'])"
+    note: "Parola değişimi token doğrulaması olmadan GET ile yapılabiliyor."
+  - file: vulnerabilities/csrf/source/medium.php
+    line: 5
+    class: csrf
+    evidence: "stripos($_SERVER['HTTP_REFERER'], $_SERVER['SERVER_NAME'])"
+    note: "Referer'da host adının geçmesi yeterli; dosya adına host koyarak bypass."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 651
+    scope: project
+    class: csrf
+    evidence: "Anti-CSRF token yalnızca impossible seviyesinde"
+    note: "low/medium formlarının hiçbirinde CSRF token yok."
+
+  # ---------- Zayıf kripto ----------
+  - file: vulnerabilities/brute/source/low.php
+    line: 9
+    class: weak-crypto
+    evidence: "md5($pass)"
+    note: "Parolalar tuzsuz MD5 ile saklanıyor."
+  - file: vulnerabilities/brute/source/medium.php
+    line: 11
+    class: weak-crypto
+    evidence: "md5($pass)"
+    note: "Tuzsuz MD5 parola özeti."
+  - file: vulnerabilities/csrf/source/low.php
+    line: 12
+    class: weak-crypto
+    evidence: "md5($pass_new)"
+    note: "Yeni parola tuzsuz MD5 ile yazılıyor."
+  - file: vulnerabilities/csrf/source/medium.php
+    line: 14
+    class: weak-crypto
+    evidence: "md5($pass_new)"
+    note: "Tuzsuz MD5."
+  - file: vulnerabilities/captcha/source/low.php
+    line: 57
+    class: weak-crypto
+    evidence: "md5($pass_new)"
+    note: "Tuzsuz MD5."
+  - file: vulnerabilities/captcha/source/medium.php
+    line: 65
+    class: weak-crypto
+    evidence: "md5($pass_new)"
+    note: "Tuzsuz MD5."
+  - file: login.php
+    line: 27
+    class: weak-crypto
+    evidence: "md5($pass)"
+    note: "Ana kimlik doğrulama tuzsuz MD5 üzerinden."
+  - file: vulnerabilities/csrf/test_credentials.php
+    line: 19
+    class: weak-crypto
+    evidence: "md5($pass)"
+    note: "Tuzsuz MD5 parola doğrulaması."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 651
+    class: weak-crypto
+    evidence: "md5(uniqid())"
+    note: "CSRF token'ı kriptografik olmayan uniqid()'in MD5'i — tahmin edilebilir."
+  - file: dvwa/includes/DBMS/MySQL.php
+    line: 55
+    class: weak-crypto
+    evidence: "MD5('password')"
+    note: "Kullanıcı tablosu tuzsuz MD5 ve zayıf varsayılan parolalarla doluyor."
+  - file: vulnerabilities/cryptography/source/low.php
+    line: 10
+    class: weak-crypto
+    evidence: "$cleartext[$i] ^ $key[$j]"
+    note: "Tekrar eden anahtarlı XOR şifreleme; kolayca kırılır."
+  - file: vulnerabilities/cryptography/source/medium.php
+    line: 3
+    class: weak-crypto
+    evidence: "openssl_decrypt(..., 'aes-128-ecb', ...)"
+    note: "ECB modu blok tekrarını sızdırır."
+  - file: vulnerabilities/javascript/source/low.php
+    line: 18
+    class: weak-crypto
+    evidence: "md5(rot13(phrase))"
+    note: "Güvenlik token'ı istemcide ROT13+MD5 ile üretiliyor."
+    confidence: low
+
+  # ---------- Gömülü sırlar ----------
+  - file: vulnerabilities/cryptography/source/low.php
+    line: 16
+    class: hardcoded-secret
+    evidence: "$key = 'wachtwoord'"
+    note: "Şifreleme anahtarı kaynak kodda sabit."
+  - file: vulnerabilities/cryptography/source/medium.php
+    line: 10
+    class: hardcoded-secret
+    evidence: "$key = 'ik ben een aardbei'"
+    note: "AES anahtarı kaynak kodda sabit."
+  - file: config/config.inc.php.dist
+    line: 21
+    class: hardcoded-secret
+    evidence: "db_password ... ?: 'p@ssw0rd'"
+    note: "Varsayılan veritabanı parolası gömülü."
+  - file: vulnerabilities/api/src/Login.php
+    line: 10
+    class: hardcoded-secret
+    evidence: "ACCESS_TOKEN_SECRET = '12345'"
+    note: "Access token gizli anahtarı sabit ve zayıf."
+  - file: vulnerabilities/api/src/Login.php
+    line: 12
+    class: hardcoded-secret
+    evidence: "REFRESH_TOKEN_SECRET = '98765'"
+    note: "Refresh token gizli anahtarı sabit."
+  - file: vulnerabilities/api/src/Token.php
+    line: 10
+    class: hardcoded-secret
+    evidence: "ENCRYPTION_KEY = 'Paintbrush'"
+    note: "Token şifreleme anahtarı sabit."
+  - file: vulnerabilities/api/src/LoginController.php
+    line: 60
+    class: hardcoded-secret
+    evidence: "$username == 'mrbennett' && $password == 'becareful'"
+    note: "Kimlik bilgileri kaynak kodda gömülü."
+  - file: vulnerabilities/api/src/LoginController.php
+    line: 86
+    class: hardcoded-secret
+    evidence: "client_secret == 'ABigLongSecret'"
+    note: "OAuth istemci gizli anahtarı gömülü."
+  - file: vulnerabilities/api/src/UserController.php
+    line: 31
+    class: hardcoded-secret
+    evidence: "sabit parola özetleri"
+    note: "Kullanıcı parola özetleri kaynak kodda sabit."
+
+  # ---------- Path traversal / dosya dahil etme ----------
+  - file: vulnerabilities/fi/index.php
+    line: 36
+    class: path-traversal
+    evidence: "include($file)"
+    note: "Kullanıcı kontrollü yol doğrudan include ediliyor (LFI/RFI)."
+  - file: vulnerabilities/fi/source/low.php
+    line: 4
+    class: path-traversal
+    evidence: "$file = $_GET['page']"
+    note: "page parametresi doğrulanmadan include hedefi oluyor."
+  - file: vulnerabilities/fi/source/medium.php
+    line: 8
+    class: path-traversal
+    evidence: "str_replace(array('../', '..\\\\'), '', $file)"
+    note: "Tek geçişli filtre; ....// ile bypass edilir."
+  - file: vulnerabilities/view_source.php
+    line: 63
+    class: path-traversal
+    evidence: "vulnerabilities/{$id}/source/{$security}.php"
+    note: "id ve security GET parametreleri dosya yoluna filtresiz gömülüyor."
+  - file: vulnerabilities/view_help.php
+    line: 22
+    class: path-traversal
+    evidence: "vulnerabilities/{$id}/help/help.{$locale}.php"
+    note: "id ve locale dosya yoluna filtresiz gömülüyor."
+  - file: php.ini
+    line: 5
+    class: path-traversal
+    evidence: "allow_url_include = on"
+    note: "Uzaktan dosya dahil etmeyi (RFI) etkinleştiren tehlikeli ayar."
+    confidence: low
+
+  # ---------- Kod çalıştırma / dosya yükleme ----------
+  - file: vulnerabilities/view_help.php
+    line: 20
+    class: code-injection-eval
+    evidence: "eval('?>' . file_get_contents(...))"
+    note: "GET ile seçilen dosyanın içeriği eval() ile çalıştırılıyor."
+  - file: vulnerabilities/upload/source/low.php
+    line: 9
+    class: unrestricted-file-upload
+    evidence: "move_uploaded_file(..., $target_path)"
+    note: "Tür/uzantı kontrolü yok; webroot altına .php yüklenip çalıştırılabilir."
+  - file: vulnerabilities/upload/source/medium.php
+    line: 18
+    class: unrestricted-file-upload
+    evidence: "move_uploaded_file(..., $target_path)"
+    note: "Yalnızca istemci Content-Type'ı kontrol ediliyor; sahte MIME ile bypass."
+
+  # ---------- Açık yönlendirme ----------
+  - file: vulnerabilities/open_redirect/source/low.php
+    line: 4
+    class: open-redirect
+    evidence: "header('location: ' . $_GET['redirect'])"
+    note: "redirect parametresi doğrulanmadan Location başlığına yazılıyor."
+  - file: vulnerabilities/open_redirect/source/medium.php
+    line: 11
+    class: open-redirect
+    evidence: "header('location: ' . $_GET['redirect'])"
+    note: "Sadece http(s):// engelleniyor; //evil.com ile bypass."
+
+  # ---------- Oturum yapılandırması ----------
+  - file: vulnerabilities/weak_id/source/low.php
+    line: 11
+    class: session-misconfig
+    evidence: "setcookie('dvwaSession', $cookie_value)"
+    note: "Oturum kimliği artan tamsayı; tamamen tahmin edilebilir."
+  - file: vulnerabilities/weak_id/source/medium.php
+    line: 7
+    class: session-misconfig
+    evidence: "$cookie_value = time()"
+    note: "Oturum kimliği zaman damgası; dar aralıkta brute-force edilebilir."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 55
+    scope: project
+    class: session-misconfig
+    evidence: "$httponly = false"
+    note: "Oturum çerezi HttpOnly bayrağı olmadan gönderiliyor."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 56
+    scope: project
+    class: session-misconfig
+    evidence: "$samesite = ''"
+    note: "SameSite bayrağı boş; cross-site istek gönderimine açık."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 60
+    scope: project
+    class: session-misconfig
+    evidence: "$secure = false"
+    note: "Oturum çerezi Secure bayrağı olmadan gönderiliyor."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 103
+    scope: project
+    class: session-misconfig
+    evidence: "session_id($_COOKIE[session_name()])"
+    note: "Girişte oturum kimliği yenilenmiyor — session fixation."
+  - file: dvwa/includes/dvwaPage.inc.php
+    line: 226
+    scope: project
+    class: session-misconfig
+    evidence: "setcookie('security', ..., false, $httponly)"
+    note: "security çerezi Secure=false ile yazılıyor."
+
+  # ---------- Erişim kontrolü ----------
+  - file: vulnerabilities/bac/source/low.php
+    line: 33
+    class: idor
+    evidence: "if ($id == $cookie_id)"
+    note: "Yetki kontrolü istemcinin değiştirebildiği çereze dayanıyor."
+  - file: vulnerabilities/bac/source/medium.php
+    line: 26
+    class: missing-authz
+    evidence: "$_GET['token'] == 'user_token'"
+    note: "Yetkilendirme sabit, tahmin edilebilir bir string ile yapılıyor."
+  - file: vulnerabilities/authbypass/get_user_data.php
+    line: 10
+    class: missing-authz
+    evidence: "admin kontrolü yalnızca high/impossible'da"
+    note: "low/medium'da tüm kullanıcı listesi herkese açık."
+  - file: vulnerabilities/authbypass/change_user_details.php
+    line: 11
+    class: missing-authz
+    evidence: "admin kontrolü yalnızca impossible'da"
+    note: "Her kullanıcı başkasının kaydını değiştirebilir."
+  - file: vulnerabilities/captcha/source/low.php
+    line: 45
+    class: missing-authz
+    evidence: "$_POST['step'] == '2'"
+    note: "İkinci adımda CAPTCHA hiç doğrulanmıyor."
+  - file: vulnerabilities/captcha/source/medium.php
+    line: 55
+    class: missing-authz
+    evidence: "!$_POST['passed_captcha']"
+    note: "CAPTCHA doğrulaması istemci kontrollü gizli alana dayanıyor."
+  - file: vulnerabilities/api/src/UserController.php
+    line: 265
+    class: missing-authz
+    evidence: "processRequest() — token kontrolü yok"
+    note: "User uç noktalarında kimlik/token kontrolü hiç yok."
+    confidence: low
+  - file: vulnerabilities/api/src/UserController.php
+    line: 224
+    class: mass-assignment
+    evidence: "level = intval($input['level'])"
+    note: "PUT gövdesindeki level alanı atanıyor; kullanıcı kendini admin yapabilir."
+
+  # ---------- Bilgi sızıntısı ----------
+  - file: vulnerabilities/api/src/User.php
+    line: 45
+    class: info-disclosure
+    evidence: "'password' => $this->password"
+    note: "API serileştirmesi parola özetlerini yanıtta döndürüyor."
+  - file: phpinfo.php
+    line: 8
+    class: info-disclosure
+    evidence: "phpinfo()"
+    note: "Tam PHP yapılandırması ve ortam değişkenleri web üzerinden erişilebilir."

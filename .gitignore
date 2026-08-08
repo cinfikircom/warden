@@ -26,3 +26,7 @@ warden.authz.yml
 
 # Test fixture'ları kasıtlı örnek dosyalar içerir (.env dahil) — izinli
 !**/test/fixtures/**
+
+# Benchmark korpusu — indirilen üçüncü taraf zafiyetli uygulamalar (pnpm bench:fetch)
+benchmark/.corpus/
+benchmark/tmp/

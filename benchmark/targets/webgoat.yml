@@ -1,0 +1,323 @@
+# OWASP WebGoat (Java / Spring) ground truth
+#
+# Kaynak: https://github.com/WebGoat/WebGoat
+#
+# BU HEDEFİN ÖZEL AMACI: Warden'ın Java'da SIFIR dile özgü kuralı var. Recall'un düşük
+# çıkması BEKLENİYOR ve bu dürüst bir sonuçtur — "Java destekleniyor" iddiasının
+# gerçekte ne anlama geldiğini ölçer.
+#
+# Düzeltilmiş varyantlar (ProfileUploadFix, OpenRedirectSecureController,
+# SqlOnlyInputValidation*, usersFixed() …) bilerek DIŞARIDA bırakıldı.
+
+target: webgoat
+repo: https://github.com/WebGoat/WebGoat
+ref: main
+root: WebGoat-main
+language: Java / Spring
+
+vulnerabilities:
+  # ---------- SQL injection ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson2.java
+    line: 49
+    class: sql-injection
+    evidence: "statement.executeQuery(query)"
+    note: "@RequestParam query doğrudan Statement.executeQuery'ye veriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson3.java
+    line: 47
+    class: sql-injection
+    evidence: "statement.executeUpdate(query)"
+    note: "Kullanıcının gönderdiği ham SQL metni çalıştırılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson4.java
+    line: 46
+    class: sql-injection
+    evidence: "statement.executeUpdate(query)"
+    note: "@RequestParam DDL/DML metni filtresiz çalıştırılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson5.java
+    line: 65
+    class: sql-injection
+    evidence: "statement.executeQuery(query)"
+    note: "İstekten gelen query doğrudan çalıştırılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson5a.java
+    line: 48
+    class: sql-injection
+    evidence: "WHERE last_name = '\" + accountName + \"'"
+    note: "accountName string birleştirme ile sorguya giriyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson8.java
+    line: 62
+    class: sql-injection
+    evidence: "statement.executeQuery(query)"
+    note: "query, name ve auth_tan birleştirilerek kuruluyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson9.java
+    line: 65
+    class: sql-injection
+    evidence: "statement.execute(queryInjection)"
+    note: "queryInjection name/auth_tan birleştirilerek kuruluyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson10.java
+    line: 49
+    class: sql-injection
+    evidence: "WHERE action LIKE '%\" + action + \"%'"
+    note: "action parametresi LIKE deseni içine birleştiriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/advanced/SqlInjectionLesson6a.java
+    line: 54
+    class: sql-injection
+    evidence: "WHERE last_name = '\" + accountName + \"'"
+    note: "UNION tabanlı injection için accountName birleştiriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/advanced/SqlInjectionChallenge.java
+    line: 60
+    class: sql-injection
+    evidence: "where userid = '\" + username + \"'"
+    note: "Kayıt akışındaki kontrol birleştirilmiş sorgu ile yapılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/sqlinjection/mitigation/Servers.java
+    line: 53
+    class: sql-injection
+    evidence: "... order by \" + column"
+    note: "PreparedStatement var ama ORDER BY kısmı birleştiriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderKIDEndpoint.java
+    line: 76
+    class: sql-injection
+    evidence: "WHERE id = '\" + kid + \"'"
+    note: "JWT header'ındaki saldırgan kontrollü kid sorguya birleştiriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/challenges/challenge5/Assignment5.java
+    line: 45
+    class: sql-injection
+    evidence: "prepareStatement(\"... userid = '\" + username_login + \"'\")"
+    note: "prepareStatement var ama sorgu metni girdiyle birleştirilerek kuruluyor."
+
+  # ---------- XSS ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/xss/CrossSiteScriptingLesson5a.java
+    line: 65
+    class: xss
+    evidence: "cart.append(\"...\" + field1 + \"...\")"
+    note: "field1 kaçışsız HTML çıktısına yansıtılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/xss/stored/StoredXssComments.java
+    line: 83
+    class: xss
+    evidence: "comments.add(comment)"
+    note: "Kullanıcı yorumu sanitizasyon olmadan saklanıp servis ediliyor."
+    confidence: low
+
+  # ---------- Path traversal ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadBase.java
+    line: 51
+    class: path-traversal
+    evidence: "new File(uploadDirectory, fullName)"
+    note: "fullName normalize edilmeden yola ekleniyor; ../ ile dizin dışına yazılır."
+  - file: src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadRetrieval.java
+    line: 101
+    class: path-traversal
+    evidence: "new File(catPicturesDirectory, id + \".jpg\")"
+    note: "id parametresi dosya yoluna giriyor ve içerik döndürülüyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileZipSlip.java
+    line: 79
+    class: path-traversal
+    evidence: "new File(tmpZipDirectory.toFile(), e.getName())"
+    note: "Zip entry adı doğrulanmadan hedef yola ekleniyor (Zip Slip)."
+
+  # ---------- Güvensiz deserialization / XML ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/deserialization/InsecureDeserializationTask.java
+    line: 45
+    class: insecure-deserialization
+    evidence: "ois.readObject()"
+    note: "İstekten gelen base64 token tip kontrolü olmadan deserialize ediliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/deserialization/SerializationHelper.java
+    line: 23
+    class: insecure-deserialization
+    evidence: "ois.readObject()"
+    note: "Filtresiz ObjectInputStream; whitelist/ObjectInputFilter yok."
+  - file: src/main/java/org/owasp/webgoat/lessons/vulnerablecomponents/VulnerableComponentsLesson.java
+    line: 42
+    class: insecure-deserialization
+    evidence: "xstream.fromXML(payload)"
+    note: "XStream güvenlik yapılandırması olmadan kullanıcı XML'i deserialize ediliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/xxe/CommentsCache.java
+    line: 79
+    class: insecure-deserialization
+    evidence: "xif.createXMLStreamReader(new StringReader(xml))"
+    note: "securityEnabled=false ile harici DTD/entity kapatılmıyor (XXE)."
+    confidence: low
+
+  # ---------- SSRF ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/ssrf/SSRFTask2.java
+    line: 36
+    class: ssrf
+    evidence: "new URL(url).openStream()"
+    note: "İstemciden gelen url sunucu tarafında açılıp içeriği yanıta yazılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderJKUEndpoint.java
+    line: 57
+    class: ssrf
+    evidence: "new JwkProviderBuilder(new URL(jku.asString()))"
+    note: "JWT header'ındaki jku URL'i doğrulanmadan çekiliyor."
+
+  # ---------- Açık yönlendirme ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/openredirect/OpenRedirectRealRedirect.java
+    line: 21
+    class: open-redirect
+    evidence: "new ModelAndView(\"redirect:\" + url)"
+    note: "url parametresi doğrulanmadan yönlendirme hedefi oluyor."
+
+  # ---------- Erişim kontrolü ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/idor/IDORViewOtherProfile.java
+    line: 51
+    class: idor
+    evidence: "new UserProfile(userId)"
+    note: "Path'ten gelen userId için yatay yetki kontrolü yok."
+  - file: src/main/java/org/owasp/webgoat/lessons/idor/IDOREditOtherProfile.java
+    line: 51
+    class: idor
+    evidence: "new UserProfile(userId)"
+    note: "PUT ile gelen userId oturum sahibiyle karşılaştırılmıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/missingac/MissingFunctionACUsers.java
+    line: 54
+    class: missing-authz
+    evidence: "usersService()"
+    note: "Tüm kullanıcı listesi admin kontrolü olmadan döndürülüyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/authbypass/AccountVerificationHelper.java
+    line: 63
+    class: missing-authz
+    evidence: "submittedQuestions.containsKey(...)"
+    note: "Beklenen anahtar gönderilmezse kontrol atlanıyor ve true dönüyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/challenges/challenge8/Assignment8.java
+    line: 46
+    class: missing-authz
+    evidence: "request.getMethod().equals(\"GET\")"
+    note: "Yetkilendirme yalnızca HTTP metoduna dayanıyor."
+  - file: src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java
+    line: 44
+    class: missing-authz
+    evidence: "\"/actuator/**\" permitAll"
+    note: "Actuator uçları kimlik doğrulamasız açılmış."
+  - file: src/main/java/org/owasp/webgoat/lessons/missingac/MissingFunctionACUsers.java
+    line: 81
+    class: mass-assignment
+    evidence: "addUser(@RequestBody User newUser)"
+    note: "İstek gövdesi doğrudan entity'ye bağlanıyor; admin alanı set edilebilir."
+
+  # ---------- CSRF ----------
+  - file: src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java
+    line: 67
+    scope: project
+    class: csrf
+    evidence: "csrf.disable()"
+    note: "Uygulama genelinde CSRF koruması kapatılmış."
+  - file: src/main/java/org/owasp/webgoat/lessons/csrf/ForgedReviews.java
+    line: 38
+    class: csrf
+    evidence: "weakAntiCSRF = \"2aa14227b9a13d0bede0388a7fba9aa9\""
+    note: "Anti-CSRF token sabit ve tüm kullanıcılar için aynı."
+
+  # ---------- Zayıf kripto ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/cryptography/HashingAssignment.java
+    line: 39
+    class: weak-crypto
+    evidence: "MessageDigest.getInstance(\"MD5\")"
+    note: "Sır özetlemek için kırılmış MD5 kullanılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/missingac/DisplayUser.java
+    line: 35
+    class: weak-crypto
+    evidence: "String salt = password + passwordSalt + username"
+    note: "Statik salt ve hızlı SHA-256 ile parola hash'i."
+  - file: src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java
+    line: 93
+    scope: project
+    class: weak-crypto
+    evidence: "NoOpPasswordEncoder"
+    note: "Parolalar hiç hash'lenmeden düz metin saklanıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/jwt/JWTVotesEndpoint.java
+    line: 141
+    class: weak-crypto
+    evidence: "Jwts.parser().setSigningKey(...).parse(accessToken)"
+    note: "parseClaimsJws yerine parse(); imzasız token kabul edilebiliyor."
+    confidence: low
+
+  # ---------- Oturum ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/hijacksession/cas/HijackSessionAuthenticationProvider.java
+    line: 30
+    class: session-misconfig
+    evidence: "++id + \"-\" + Instant.now().toEpochMilli()"
+    note: "Oturum kimliği sayaç + zaman damgası; tahmin edilebilir."
+
+  # ---------- Gömülü sırlar ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/challenges/SolutionConstants.java
+    line: 10
+    class: hardcoded-secret
+    evidence: "PASSWORD = \"!!webgoat_admin_1234!!\""
+    note: "Admin parolası kaynak kodda sabit."
+  - file: src/main/java/org/owasp/webgoat/lessons/spoofcookie/SpoofCookieAssignment.java
+    line: 38
+    class: hardcoded-secret
+    evidence: "Map.of(\"webgoat\", \"webgoat\", \"admin\", \"admin\", ...)"
+    note: "Kullanıcı adı/parola çiftleri kodda gömülü."
+  - file: src/main/java/org/owasp/webgoat/lessons/insecurelogin/InsecureLoginTask.java
+    line: 21
+    class: hardcoded-secret
+    evidence: "\"CaptainJack\".equals(username) && \"BlackPearl\".equals(password)"
+    note: "Kimlik doğrulama kodda gömülü değerlerle yapılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/DefaultCredentialsTask.java
+    line: 29
+    class: hardcoded-secret
+    evidence: "DEFAULT_PASSWORD = \"admin\""
+    note: "Varsayılan admin kimlik bilgisi kodda sabit."
+  - file: src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/ActuatorExposureTask.java
+    line: 28
+    class: hardcoded-secret
+    evidence: "LEAKED_API_KEY = \"INTERNAL-API-KEY-987\""
+    note: "API anahtarı sabit ve actuator ucundan sızdırılıyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/VerboseErrorTask.java
+    line: 29
+    class: hardcoded-secret
+    evidence: "LEAKED_TOKEN = \"STAGING-TOKEN-42\""
+    note: "Sistem token'ı kodda sabit ve hata çıktısıyla veriliyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/jwt/JWTSecretKeyEndpoint.java
+    line: 35
+    class: hardcoded-secret
+    evidence: "\"victory\", \"business\", \"available\", ..."
+    note: "JWT imzalama anahtarı sabit 5 kelimeden seçiliyor."
+  - file: src/main/resources/application-webgoat.properties
+    line: 14
+    class: hardcoded-secret
+    evidence: "key-store-password=${WEBGOAT_KEYSTORE_PASSWORD:password}"
+    note: "TLS keystore parolası için varsayılan 'password' gömülü."
+
+  # ---------- Bilgi sızıntısı ----------
+  - file: src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/VerboseErrorTask.java
+    line: 42
+    class: info-disclosure
+    evidence: "DB_PASSWORD=staging_password123"
+    note: "Kimlik doğrulamasız uç stack trace ile DB parolası döndürüyor."
+  - file: src/main/java/org/owasp/webgoat/lessons/logging/LogBleedingTask.java
+    line: 31
+    class: info-disclosure
+    evidence: "log.info(\"Password for Admin: {}\", ...)"
+    note: "Admin parolası (base64) uygulama loguna yazılıyor."
+  - file: src/main/resources/application-webgoat.properties
+    line: 1
+    scope: project
+    class: info-disclosure
+    evidence: "spring.web.error.include-stacktrace=always"
+    note: "Tüm hata yanıtlarında stack trace istemciye gönderiliyor."
+  - file: src/main/resources/application-webgoat.properties
+    line: 77
+    scope: project
+    class: info-disclosure
+    evidence: "management.endpoints.web.exposure.include=env, health, configprops"
+    note: "env/configprops actuator uçları açılmış; ortam değişkenleri sızıyor."
+
+  # ---------- Zafiyetli bağımlılıklar ----------
+  - file: pom.xml
+    line: 111
+    scope: project
+    class: vulnerable-dependency
+    evidence: "xstream 1.4.5"
+    note: "CVE-2013-7285 ve sonraki deserialization CVE'leri."
+  - file: pom.xml
+    line: 70
+    scope: project
+    class: vulnerable-dependency
+    evidence: "commons-collections 3.2.1"
+    note: "Klasik Java deserialization gadget zinciri."
+  - file: pom.xml
+    line: 79
+    scope: project
+    class: vulnerable-dependency
+    evidence: "jjwt 0.9.1"
+    note: "Bakımı bırakılmış; imza doğrulama API'si hatalı kullanıma açık."

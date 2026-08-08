@@ -1,0 +1,399 @@
+# OWASP NodeGoat — ground truth
+#
+# Kaynak: https://github.com/OWASP/NodeGoat (Apache-2.0), OWASP'ın resmi zafiyetli
+# Node/Express eğitim uygulaması. Zafiyetler kasıtlıdır ve çoğu kodda yorumla işaretlidir
+# ("fix" satırları yorum bloğunda bekler) — bu, envanteri doğrulanabilir kılar.
+#
+# Her madde kaynak kod okunarak çıkarıldı; `line` gerçek satır numarasıdır.
+# `confidence: low` olanlar tartışmaya açıktır (savunma-derinliği kaybı, terk edilmiş
+# bağımlılık gibi), ama recall'u yapay şişirmemek için yine de sayılırlar.
+
+target: nodegoat
+repo: https://github.com/OWASP/NodeGoat
+ref: master
+root: NodeGoat-master
+language: JS / Express
+
+vulnerabilities:
+  # ---------- A1: Injection ----------
+  - file: app/data/allocations-dao.js
+    line: 78
+    class: nosql-injection
+    evidence: '$where: `this.userId == ${parsedUserId} && this.stocks > ''${threshold}''`'
+    note: "?threshold query parametresi sanitize edilmeden MongoDB $where JavaScript ifadesine gömülüyor."
+  - file: app/routes/allocations.js
+    line: 21
+    class: nosql-injection
+    evidence: "const { threshold } = req.query;"
+    note: "Ham query parametresi doğrulanmadan DAO'nun $where sorgusuna taşınıyor (taint kaynağı)."
+  - file: app/views/allocations.html
+    line: 22
+    class: nosql-injection
+    evidence: '<input type="text" name="threshold" />'
+    note: "Güvenli type=number alanı yorumda; serbest metin girişi bırakılmış (savunma-derinliği kaybı)."
+    confidence: low
+  - file: app/routes/contributions.js
+    line: 32
+    class: code-injection-eval
+    evidence: "const preTax = eval(req.body.preTax);"
+    note: "POST gövdesi doğrudan eval()'e veriliyor — sunucu tarafı kod çalıştırma."
+  - file: app/routes/contributions.js
+    line: 33
+    class: code-injection-eval
+    evidence: "const afterTax = eval(req.body.afterTax);"
+    note: "POST gövdesi doğrudan eval()'e veriliyor."
+  - file: app/routes/contributions.js
+    line: 34
+    class: code-injection-eval
+    evidence: "const roth = eval(req.body.roth);"
+    note: "POST gövdesi doğrudan eval()'e veriliyor."
+  - file: app/routes/session.js
+    line: 64
+    class: info-disclosure
+    evidence: 'console.log("Error: attempt to login with invalid user: ", userName);'
+    note: "Kullanıcı girdisi CRLF kaçışı olmadan loga yazılıyor — log forging."
+    confidence: low
+
+  # ---------- A2: Broken Authentication ----------
+  - file: app/data/user-dao.js
+    line: 25
+    scope: project
+    class: weak-crypto
+    evidence: "password //received from request param"
+    note: "Parola hash'lenmeden düz metin saklanıyor; bcrypt fix'i yorumda."
+  - file: app/data/user-dao.js
+    line: 61
+    scope: project
+    class: weak-crypto
+    evidence: "return fromDB === fromUser;"
+    note: "Parola karşılaştırması düz metin eşitliğiyle; bcrypt.compareSync devre dışı."
+  - file: app/routes/session.js
+    line: 144
+    scope: project
+    class: weak-password-policy
+    evidence: "const PASS_RE = /^.{1,20}$/;"
+    note: "Tek karakterlik parolaya izin veriyor; karmaşıklık regex'i yorumda."
+  - file: app/routes/session.js
+    line: 85
+    scope: project
+    class: info-disclosure
+    evidence: "loginError: invalidUserNameErrorMessage,"
+    note: "Geçersiz kullanıcı adı ve parola için farklı mesaj — kullanıcı adı enumeration."
+  - file: app/routes/session.js
+    line: 94
+    scope: project
+    class: info-disclosure
+    evidence: "loginError: invalidPasswordErrorMessage,"
+    note: '"Invalid password" mesajı kullanıcının var olduğunu doğruluyor.'
+  - file: app/routes/session.js
+    line: 116
+    scope: project
+    class: session-misconfig
+    evidence: "req.session.userId = user._id;"
+    note: "Login sonrası session.regenerate() yok — session fixation."
+
+  # ---------- A3: XSS ----------
+  - file: server.js
+    line: 137
+    class: xss
+    evidence: "autoescape: false"
+    note: "Swig şablon motorunda otomatik HTML kaçışı kapalı — tüm çıktılar ham."
+  - file: app/views/profile.html
+    line: 78
+    class: xss
+    evidence: '<a href="{{firstNameSafeString}}">'
+    note: "firstName URL bağlamında ham href içine yazılıyor; javascript: payload'ı."
+  - file: app/routes/profile.js
+    line: 28
+    class: xss
+    evidence: "doc.website = ESAPI.encoder().encodeForHTML(doc.website);"
+    note: "Yanlış bağlamda encode — HTML encode edilen değer URL bağlamında kullanılıyor."
+  - file: app/views/profile.html
+    line: 70
+    class: xss
+    evidence: 'value="{{website}}"'
+    note: "autoescape kapalıyken kullanıcı değeri attribute içine ham basılıyor."
+    confidence: low
+  - file: app/views/memos.html
+    line: 31
+    class: xss
+    evidence: "{{ marked(doc.memo) }}"
+    note: "Kullanıcı memo'su marked 0.3.5 ile HTML'e çevrilip ham basılıyor — stored XSS."
+  - file: server.js
+    line: 78
+    scope: project
+    class: session-misconfig
+    evidence: "app.use(session({"
+    note: "Session cookie'de httpOnly/secure/maxAge yok; fix yorumda."
+
+  # ---------- A4: IDOR ----------
+  - file: app/routes/allocations.js
+    line: 18
+    class: idor
+    evidence: "} = req.params;"
+    note: "userId session yerine URL'den alınıyor — başkasının varlıkları görülebiliyor."
+  - file: app/routes/index.js
+    line: 63
+    class: idor
+    evidence: 'app.get("/allocations/:userId", isLoggedIn, allocationsHandler.displayAllocations);'
+    note: "Rota userId'yi path parametresi kabul ediyor, sahiplik kontrolü yok."
+
+  # ---------- A5/A7: Erişim kontrolü ve yapılandırma ----------
+  - file: app/routes/index.js
+    line: 55
+    scope: project
+    class: missing-authz
+    evidence: 'app.get("/benefits", isLoggedIn, benefitsHandler.displayBenefits);'
+    note: "Admin sayfası isAdmin middleware'i olmadan tüm oturumlara açık."
+  - file: app/routes/index.js
+    line: 56
+    scope: project
+    class: missing-authz
+    evidence: 'app.post("/benefits", isLoggedIn, benefitsHandler.updateBenefits);'
+    note: "Herhangi bir kullanıcı istediği userId'nin benefit tarihini değiştirebiliyor."
+  - file: app/routes/benefits.js
+    line: 22
+    scope: project
+    class: missing-authz
+    evidence: "user: { isAdmin: true }"
+    note: "Şablona gerçek rol yerine sabit isAdmin:true gönderiliyor."
+  - file: app/routes/benefits.js
+    line: 35
+    class: idor
+    evidence: "benefitsDAO.updateBenefits(userId, benefitStartDate, (error) => {"
+    note: "userId req.body'den geliyor, sahiplik/rol doğrulaması yok."
+  - file: server.js
+    line: 42
+    scope: project
+    class: info-disclosure
+    evidence: 'app.disable("x-powered-by");'
+    note: "Yorum bloğunda — X-Powered-By kapatılmamış, teknoloji parmak izi sızıyor."
+  - file: server.js
+    line: 45
+    scope: project
+    class: session-misconfig
+    evidence: "app.use(helmet.frameguard());"
+    note: "Tüm helmet başlıkları yorumda — clickjacking ve MIME sniffing korumasız."
+  - file: server.js
+    line: 89
+    scope: project
+    class: session-misconfig
+    evidence: 'key: "sessionId",'
+    note: "Genel cookie adı fix'i devre dışı; varsayılan connect.sid framework'ü ele veriyor."
+    confidence: low
+
+  # ---------- A6: Hassas veri ----------
+  - file: app/data/profile-dao.js
+    line: 62
+    scope: project
+    class: info-disclosure
+    evidence: "user.ssn = ssn;"
+    note: "SSN şifrelenmeden saklanıyor; crypto fix'i yorumda."
+  - file: app/data/profile-dao.js
+    line: 65
+    scope: project
+    class: info-disclosure
+    evidence: "user.dob = dob;"
+    note: "Doğum tarihi şifrelenmeden saklanıyor."
+  - file: app/data/profile-dao.js
+    line: 56
+    scope: project
+    class: info-disclosure
+    evidence: "user.bankAcc = bankAcc;"
+    note: "Banka hesap numarası şifrelenmeden saklanıyor."
+  - file: server.js
+    line: 145
+    scope: project
+    class: info-disclosure
+    evidence: "http.createServer(app).listen(port, () => {"
+    note: "Düz HTTP servis; HTTPS fix'i yorumda — kimlik bilgileri ve SSN açık gidiyor."
+  - file: app/routes/error.js
+    line: 11
+    class: info-disclosure
+    evidence: 'res.render("error-template", { error: err });'
+    note: "Hata nesnesi doğrudan istemciye render ediliyor."
+  - file: app/views/error-template.html
+    line: 11
+    class: info-disclosure
+    evidence: "<br>{{error}}"
+    note: "Hata detayı autoescape kapalıyken ham basılıyor."
+  - file: config/config.js
+    line: 13
+    class: info-disclosure
+    evidence: "console.log(util.inspect(config, false, null));"
+    note: "Tüm konfigürasyon (cookieSecret, cryptoKey, DB URI) açılışta loga yazılıyor."
+
+  # ---------- Gömülü sırlar ----------
+  - file: config/env/all.js
+    line: 8
+    class: hardcoded-secret
+    evidence: 'cookieSecret: "session_cookie_secret_key_here",'
+    note: "Session imzalama anahtarı kaynak kodda sabit — cookie forge edilebilir."
+  - file: config/env/all.js
+    line: 9
+    class: hardcoded-secret
+    evidence: 'cryptoKey: "a_secure_key_for_crypto_here",'
+    note: "Şifreleme anahtarı repo'da sabit."
+  - file: config/env/all.js
+    line: 3
+    class: hardcoded-secret
+    evidence: 'let db = process.env.MONGODB_URI || "mongodb://localhost:27017/nodegoat";'
+    note: "Kimlik doğrulamasız varsayılan MongoDB bağlantı dizesi gömülü."
+    confidence: low
+  - file: config/env/development.js
+    line: 6
+    class: hardcoded-secret
+    evidence: 'zapApiKey: "v9dn0balpqas1pcc281tn5ood1",'
+    note: "ZAP API anahtarı kaynak kodda düz metin."
+  - file: config/env/test.js
+    line: 6
+    class: hardcoded-secret
+    evidence: 'zapApiKey: "v9dn0balpqas1pcc281tn5ood1",'
+    note: "ZAP API anahtarı test config'inde düz metin."
+  - file: artifacts/db-reset.js
+    line: 18
+    class: hardcoded-secret
+    evidence: '"password": "Admin_123",'
+    note: "Admin parolası seed dosyasında düz metin."
+  - file: artifacts/db-reset.js
+    line: 27
+    class: hardcoded-secret
+    evidence: '"password": "User1_123"'
+    note: "user1 parolası seed verisinde düz metin."
+  - file: artifacts/db-reset.js
+    line: 35
+    class: hardcoded-secret
+    evidence: '"password": "User2_123"'
+    note: "user2 parolası seed verisinde düz metin."
+  - file: artifacts/cert/server.key
+    line: 1
+    class: hardcoded-secret
+    evidence: "-----BEGIN RSA PRIVATE KEY-----"
+    note: "TLS özel anahtarı repo'ya commit edilmiş."
+    confidence: low
+
+  # ---------- A8: CSRF ----------
+  - file: server.js
+    line: 7
+    scope: project
+    class: csrf
+    evidence: "// const csrf = require('csurf');"
+    note: "csurf import'u yorumda — CSRF koruması hiç yüklenmiyor."
+  - file: server.js
+    line: 107
+    scope: project
+    class: csrf
+    evidence: "app.use(csrf());"
+    note: "CSRF middleware'i tümüyle yorum bloğunda; tüm POST uçları korumasız."
+  - file: app/views/contributions.html
+    line: 91
+    scope: project
+    class: csrf
+    evidence: '<input type="hidden" name="_csrf" value="{{csrftoken}}">'
+    note: "Katkı formundaki CSRF token alanı yoruma alınmış."
+  - file: app/views/benefits.html
+    line: 56
+    scope: project
+    class: csrf
+    evidence: '<input type="hidden" name="userId" value="{{user._id.toString()}}">'
+    note: "Admin benefits formunda CSRF token alanı yok."
+    confidence: low
+
+  # ---------- A10 / SSRF / açık yönlendirme ----------
+  - file: app/routes/index.js
+    line: 72
+    class: open-redirect
+    evidence: "return res.redirect(req.query.url);"
+    note: "Yönlendirme hedefi doğrulanmadan query string'den alınıyor."
+  - file: app/routes/research.js
+    line: 15
+    class: ssrf
+    evidence: "const url = req.query.url + req.query.symbol;"
+    note: "İstek URL'si tamamen kullanıcı kontrolünde, whitelist yok."
+  - file: app/routes/research.js
+    line: 16
+    class: ssrf
+    evidence: "return needle.get(url, (error, newResponse, body) => {"
+    note: "Sunucu keyfi URL'ye istek atıyor — iç ağ ve cloud metadata erişilebilir."
+  - file: app/routes/research.js
+    line: 25
+    class: xss
+    evidence: "res.write(body);"
+    note: "Uzak gövde text/html olarak istemciye yazılıyor — yansıtılmış XSS."
+
+  # ---------- ReDoS ----------
+  - file: app/routes/profile.js
+    line: 59
+    class: regex-dos
+    evidence: "const regexPattern = /([0-9]+)+\\#/;"
+    note: "İç içe greedy quantifier — catastrophic backtracking."
+  - file: app/routes/profile.js
+    line: 61
+    class: regex-dos
+    evidence: "const testComplyWithRequirements = regexPattern.test(bankRouting);"
+    note: "Kullanıcı girdisi zafiyetli regex'e uygulanıyor (sink)."
+
+  # ---------- Diğer ----------
+  - file: app/routes/profile.js
+    line: 96
+    class: mass-assignment
+    evidence: "//firstName = firstName.trim();"
+    note: "HTTP Parameter Pollution — dizi gelen alanlarda string metotları DoS'a yol açabiliyor."
+    confidence: low
+  - file: app/data/contributions-dao.js
+    line: 29
+    class: nosql-injection
+    evidence: "userId"
+    note: "Tip doğrulaması yapılmamış değerler filtreye ham objeye geçiyor — operator injection."
+    confidence: low
+  - file: app/data/memos-dao.js
+    line: 23
+    class: nosql-injection
+    evidence: "memosCol.insert(memos, (err, result) => ..."
+    note: "req.body.memo tip kontrolü olmadan insert ediliyor."
+    confidence: low
+
+  # ---------- Zafiyetli bağımlılıklar ----------
+  - file: package.json
+    line: 17
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"marked": "0.3.5"'
+    note: "marked 0.3.5 — ReDoS ve XSS sanitizer bypass."
+  - file: package.json
+    line: 23
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"underscore": "^1.8.3"'
+    note: "underscore 1.9.1 — CVE-2021-23358, _.template ile kod çalıştırma."
+  - file: package.json
+    line: 8
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"bcrypt-nodejs": "0.0.3"'
+    note: "Terk edilmiş kripto kütüphanesi, yama almıyor."
+  - file: package.json
+    line: 22
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"swig": "^1.4.2"'
+    note: "Bakımı bırakılmış şablon motoru; autoescape kapatılabiliyor."
+  - file: package.json
+    line: 20
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"node-esapi": "0.0.1"'
+    note: "Terk edilmiş encoding kütüphanesi, bağlam-duyarlı encode eksik."
+  - file: package.json
+    line: 18
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"mongodb": "^2.1.18"'
+    note: "EOL 2.x sürücü hattı, güvenlik güncellemesi almıyor."
+  - file: package.json
+    line: 19
+    scope: project
+    class: vulnerable-dependency
+    evidence: '"needle": "2.2.4"'
+    note: "Eski sabit pin; sonraki sürümlerde güvenlik düzeltmeleri var."
+    confidence: low

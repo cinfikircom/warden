@@ -1,0 +1,687 @@
+# pygoat (Python / Django) ground truth
+#
+# Kaynak: https://github.com/adeyosemanputra/pygoat — OWASP Top 10 eğitim uygulaması.
+#
+# KAPSAM: yalnızca ANA PROJE (`introduction/`, `pygoat/`, `challenge/`, `requirements.txt`).
+# `dockerized_labs/` ayrı bir Flask/Django lab koleksiyonudur ve bilerek dışarıda bırakıldı —
+# ana projenin recall'unu ayrı bir kod tabanının sonuçlarıyla karıştırmamak için.
+#
+# Sözlük eşlemesi: XXE -> insecure-deserialization, SSTI -> code-injection-eval.
+# Düzeltilmiş varyantlar (auth_failure_lab2: argon2 + lockout) dışarıda bırakıldı.
+
+target: pygoat
+repo: https://github.com/adeyosemanputra/pygoat
+ref: master
+root: pygoat-master
+language: Python / Django
+
+vulnerabilities:
+  # ---------- settings ----------
+  - file: pygoat/settings.py
+    line: 25
+    class: hardcoded-secret
+    evidence: "SECRET_KEY = 'lr66%-a!$km5...'"
+    note: "Django SECRET_KEY gömülü; session/CSRF token'ları forge edilebilir."
+  - file: pygoat/settings.py
+    line: 27
+    class: hardcoded-secret
+    evidence: "SENSITIVE_DATA = 'FLAGTHAT...'"
+    note: "Gizli değer settings dosyasına gömülü."
+  - file: pygoat/settings.py
+    line: 30
+    scope: project
+    class: info-disclosure
+    evidence: "DEBUG = True"
+    note: "Debug açık; hata sayfaları stack trace ve settings sızdırır."
+  - file: pygoat/settings.py
+    line: 171
+    class: hardcoded-secret
+    evidence: "SECRET_COOKIE_KEY = 'PYGOAT'"
+    note: "JWT imzalama anahtarı gömülü ve tahmin edilebilir."
+  - file: pygoat/settings.py
+    line: 25
+    scope: project
+    class: session-misconfig
+    evidence: "SESSION_COOKIE_SECURE / HTTPONLY / CSRF_COOKIE_SECURE tanımsız"
+    note: "Oturum ve CSRF çerezleri için güvenlik bayrakları hiç ayarlanmamış."
+
+  # ---------- XSS ----------
+  - file: introduction/views.py
+    line: 101
+    class: xss
+    evidence: "render(... {'query': q})"
+    note: "GET q şablona geçiyor ve |safe ile kaçışsız basılıyor."
+  - file: introduction/views.py
+    line: 112
+    class: xss
+    evidence: "username.replace('<script>', '')"
+    note: "Kara liste filtresi; onerror gibi payload'lar geçer."
+  - file: introduction/views.py
+    line: 129
+    class: xss
+    evidence: "re.sub(pattern, '', username)"
+    note: "Sonuç <script> bloğuna basılıyor; JS bağlamında autoescape korumaz."
+  - file: introduction/views.py
+    line: 1224
+    class: xss
+    evidence: "render(... {'username': username})"
+    note: "GET username |safe kullanan şablona geçiyor."
+  - file: introduction/templates/Lab/XSS/xss_lab.html
+    line: 27
+    class: xss
+    evidence: "{{query|safe}}"
+    note: "|safe ile autoescape devre dışı."
+  - file: introduction/templates/Lab/XSS/xss_lab_2.html
+    line: 20
+    class: xss
+    evidence: "{{ username|safe }}"
+    note: "Kullanıcı girdisi kaçışsız basılıyor."
+  - file: introduction/templates/Lab/XSS/xss_lab_3.html
+    line: 22
+    class: xss
+    evidence: "{{code}} (script bloğu içinde)"
+    note: "JS bağlamında HTML autoescape koruma sağlamaz."
+  - file: introduction/templates/Lab_2021/A8_software_and_data_integrity_failure/lab2.html
+    line: 11
+    class: xss
+    evidence: "{{username | safe}}"
+    note: "GET parametresi kaçışsız basılıyor."
+  - file: introduction/utility.py
+    line: 56
+    class: xss
+    evidence: "return code"
+    note: "filter_blog hiçbir filtreleme yapmıyor; sözde sanitizasyon."
+    confidence: low
+
+  # ---------- SQL injection ----------
+  - file: introduction/views.py
+    line: 158
+    class: sql-injection
+    evidence: "\"SELECT * FROM introduction_login WHERE user='\"+name+\"'\""
+    note: "POST girdileri string birleştirme ile SQL'e giriyor."
+  - file: introduction/views.py
+    line: 162
+    class: sql-injection
+    evidence: "login.objects.raw(sql_query)"
+    note: "Birleştirilmiş sorgu parametresiz .raw() ile çalıştırılıyor."
+  - file: introduction/views.py
+    line: 864
+    class: sql-injection
+    evidence: "\"... WHERE id='\"+name+\"'AND password='\"+password+\"'\""
+    note: "POST girdileri sorguya birleştiriliyor."
+  - file: introduction/views.py
+    line: 878
+    class: sql-injection
+    evidence: "sql_lab_table.objects.raw(sql_query)"
+    note: "Parametresiz .raw() çalıştırması."
+
+  # ---------- Komut / kod çalıştırma ----------
+  - file: introduction/views.py
+    line: 424
+    class: command-injection
+    evidence: "\"nslookup {}\".format(domain)"
+    note: "POST domain kabuk komut dizesine gömülüyor."
+  - file: introduction/views.py
+    line: 426
+    class: command-injection
+    evidence: "\"dig {}\".format(domain)"
+    note: "Girdi filtrelenmeden komuta ekleniyor."
+  - file: introduction/views.py
+    line: 432
+    class: command-injection
+    evidence: "shell=True"
+    note: "Popen kullanıcı girdisi içeren dizeyi shell=True ile çalıştırıyor."
+  - file: introduction/mitre.py
+    line: 233
+    class: command-injection
+    evidence: "subprocess.Popen(command, shell=True, ...)"
+    note: "Dize komut shell=True ile çalıştırılıyor."
+  - file: introduction/mitre.py
+    line: 241
+    class: command-injection
+    evidence: "\"nmap \" + ip"
+    note: "POST ip filtresiz kabuk komutuna ekleniyor."
+  - file: introduction/views.py
+    line: 460
+    class: code-injection-eval
+    evidence: "output = eval(val)"
+    note: "POST val doğrudan eval()'e veriliyor (RCE)."
+  - file: introduction/views.py
+    line: 588
+    class: code-injection-eval
+    evidence: "ImageMath.eval(function_str, ...)"
+    note: "POST function PIL ImageMath.eval'e geçiyor (CVE-2022-22817 sınıfı)."
+  - file: introduction/views.py
+    line: 981
+    class: code-injection-eval
+    evidence: "blog = request.POST['blog']"
+    note: "SSTI: kullanıcı içeriği şablon olarak derlenmek üzere alınıyor."
+  - file: introduction/views.py
+    line: 996
+    class: code-injection-eval
+    evidence: "file.write(blog)"
+    note: "SSTI: girdi templates dizinine yazılıp render ediliyor."
+  - file: introduction/mitre.py
+    line: 218
+    class: code-injection-eval
+    evidence: "result = eval(expression)"
+    note: "POST expression doğrudan eval()'e veriliyor."
+  - file: introduction/apis.py
+    line: 26
+    class: code-injection-eval
+    evidence: "python_code = request.POST['python_code']"
+    note: "Kullanıcı Python kodu diske yazılıp import ile çalıştırılıyor."
+  - file: introduction/apis.py
+    line: 70
+    class: code-injection-eval
+    evidence: "f.write(log_code)"
+    note: "Kullanıcı kodu main.py üzerine yazılıyor ve çalıştırılıyor."
+  - file: introduction/apis.py
+    line: 73
+    class: code-injection-eval
+    evidence: "f.write(api_code)"
+    note: "Kullanıcı kodu api.py üzerine yazılıyor; URL'e bağlı view."
+  - file: introduction/apis.py
+    line: 134
+    class: code-injection-eval
+    evidence: "f.write(code)"
+    note: "Kullanıcı kodu utility.py üzerine yazılıp import ediliyor."
+  - file: introduction/utility.py
+    line: 36
+    class: code-injection-eval
+    evidence: "f.write(output_Code)"
+    note: "Kullanıcı kodundan türetilen içerik main.py'ye yazılıp çalıştırılıyor."
+
+  # ---------- Deserialization / XXE ----------
+  - file: introduction/views.py
+    line: 214
+    class: insecure-deserialization
+    evidence: "pickle.loads(token)"
+    note: "Kullanıcı çerezi base64 çözülüp pickle ile deserialize ediliyor (RCE)."
+  - file: introduction/views.py
+    line: 259
+    class: insecure-deserialization
+    evidence: "parser.setFeature(feature_external_ges, True)"
+    note: "XXE: harici genel varlıklar açıkça etkinleştiriliyor."
+  - file: introduction/views.py
+    line: 260
+    class: insecure-deserialization
+    evidence: "parseString(request.body, parser=parser)"
+    note: "XXE: güvenilmeyen gövde harici varlık desteğiyle ayrıştırılıyor."
+  - file: introduction/views.py
+    line: 560
+    class: insecure-deserialization
+    evidence: "yaml.load(file, yaml.Loader)"
+    note: "Güvensiz Loader; !!python/object ile RCE."
+  - file: introduction/lab_code/test.py
+    line: 23
+    class: insecure-deserialization
+    evidence: "yaml.load(stream)"
+    note: "Loader belirtilmeden yaml.load; keyfi obje oluşturma."
+
+  # ---------- SSRF / path traversal ----------
+  - file: introduction/views.py
+    line: 961
+    class: ssrf
+    evidence: "url = request.POST['url']"
+    note: "Kullanıcı URL'i allowlist/şema kontrolü olmadan alınıyor."
+  - file: introduction/views.py
+    line: 963
+    class: ssrf
+    evidence: "requests.get(url)"
+    note: "Kullanıcı kontrollü URL sunucudan çekiliyor ve yansıtılıyor."
+  - file: introduction/views.py
+    line: 923
+    class: path-traversal
+    evidence: "file = request.POST['blog']"
+    note: "Kullanıcı dosya adı doğrulanmadan dosya işlemine geçiyor."
+  - file: introduction/views.py
+    line: 926
+    class: path-traversal
+    evidence: "os.path.join(dirname, file)"
+    note: "../ normalizasyonu yok; keyfi dosya okunabilir."
+  - file: introduction/views.py
+    line: 1006
+    class: path-traversal
+    evidence: "render(request, f'...Blogs/{blog_id}.html')"
+    note: "URL'den gelen blog_id şablon yoluna gömülüyor."
+  - file: introduction/playground/ssrf/main.py
+    line: 7
+    class: path-traversal
+    evidence: "os.path.join(dirname, file)"
+    note: "Kullanıcı dosya adı normalize edilmeden birleştiriliyor."
+
+  # ---------- Zayıf kripto ----------
+  - file: introduction/views.py
+    line: 287
+    class: weak-crypto
+    evidence: "authLogin.objects.create(... password=passwd)"
+    note: "Parola hash'lenmeden düz metin saklanıyor."
+  - file: introduction/views.py
+    line: 315
+    class: weak-crypto
+    evidence: "filter(username=user_name, password=passwd)"
+    note: "Kimlik doğrulama düz metin parola karşılaştırmasıyla."
+  - file: introduction/views.py
+    line: 496
+    class: weak-crypto
+    evidence: "otpN = randint(100, 999)"
+    note: "OTP kriptografik olmayan random ile ve 900 olasılıkla üretiliyor."
+  - file: introduction/views.py
+    line: 1026
+    class: weak-crypto
+    evidence: "md5(password.encode()).hexdigest()"
+    note: "Parola tuzsuz MD5 ile hash'leniyor."
+  - file: introduction/views.py
+    line: 1042
+    class: weak-crypto
+    evidence: "customHash(password)"
+    note: "Ev yapımı ters çevrilmiş tuzsuz SHA-256."
+  - file: introduction/views.py
+    line: 1194
+    class: weak-crypto
+    evidence: "hashlib.sha256(password.encode()).hexdigest()"
+    note: "Tuzsuz tek turlu SHA-256."
+  - file: introduction/mitre.py
+    line: 161
+    class: weak-crypto
+    evidence: "md5(password.encode()).hexdigest()"
+    note: "Tuzsuz MD5 parola hash'i."
+  - file: introduction/utility.py
+    line: 58
+    class: weak-crypto
+    evidence: "sha256(...).hexdigest()[::-1]"
+    note: "Ev yapımı tuzsuz tek turlu hash."
+
+  # ---------- Gömülü sırlar ----------
+  - file: introduction/views.py
+    line: 766
+    class: hardcoded-secret
+    evidence: "name=='jack' and password=='jacktheripper'"
+    note: "Kimlik bilgileri kodda gömülü."
+  - file: introduction/views.py
+    line: 806
+    class: hardcoded-secret
+    evidence: "name=='jack' and password=='jacktheripper'"
+    note: "Kimlik bilgileri kodda gömülü."
+  - file: introduction/views.py
+    line: 831
+    class: hardcoded-secret
+    evidence: "username == 'John' and password == 'reaper'"
+    note: "Kimlik bilgileri kodda gömülü."
+  - file: introduction/views.py
+    line: 833
+    class: hardcoded-secret
+    evidence: "username == 'admin' and password == 'admin_pass'"
+    note: "Admin kimlik bilgileri kodda gömülü."
+  - file: introduction/views.py
+    line: 866
+    class: hardcoded-secret
+    evidence: "password='65079b006e85a7e798abecb99e47c154'"
+    note: "Admin parola hash'i kodda gömülü."
+  - file: introduction/views.py
+    line: 1072
+    class: hardcoded-secret
+    evidence: "username == 'User' and password == 'P@$$w0rd'"
+    note: "Kimlik bilgileri kodda gömülü."
+  - file: introduction/views.py
+    line: 1095
+    class: hardcoded-secret
+    evidence: "jwt.decode(cookie, SECRET_COOKIE_KEY, ...)"
+    note: "JWT sabit anahtarla doğrulanıyor; admin token'ı forge edilebilir."
+  - file: introduction/views.py
+    line: 1107
+    class: hardcoded-secret
+    evidence: "jwt.encode(payload, SECRET_COOKIE_KEY, ...)"
+    note: "JWT gömülü sabit anahtarla imzalanıyor."
+  - file: introduction/views.py
+    line: 1164
+    class: hardcoded-secret
+    evidence: "'password': '491a2800b807...'"
+    note: "Kullanıcı adı/parola hash tablosu kodda gömülü."
+  - file: introduction/mitre.py
+    line: 169
+    class: hardcoded-secret
+    evidence: "jwt.encode(payload, 'csrf_vulneribility', ...)"
+    note: "JWT imzalama anahtarı literal olarak gömülü."
+  - file: introduction/mitre.py
+    line: 182
+    class: hardcoded-secret
+    evidence: "jwt.decode(cookie, 'csrf_vulneribility', ...)"
+    note: "JWT doğrulama anahtarı gömülü."
+  - file: introduction/mitre.py
+    line: 194
+    class: hardcoded-secret
+    evidence: "jwt.decode(cookie, 'csrf_vulneribility', ...)"
+    note: "Transfer API'sinde gömülü JWT anahtarı."
+
+  # ---------- Erişim kontrolü / IDOR ----------
+  - file: introduction/views.py
+    line: 302
+    class: idor
+    evidence: "filter(userid=request.COOKIES['userid'])"
+    note: "Kimlik istemci çerezinden; ardışık PK ile başka hesaba geçilir."
+  - file: introduction/views.py
+    line: 513
+    class: idor
+    evidence: "email = request.COOKIES.get('email')"
+    note: "Doğrulanacak hesap istemci çerezinden alınıyor."
+  - file: introduction/views.py
+    line: 1053
+    class: session-misconfig
+    evidence: "cookie = request.COOKIES['cookie']"
+    note: "Kimlik imzasız 'kullanıcı|bitiş' çerezinden okunuyor."
+  - file: introduction/views.py
+    line: 256
+    class: missing-authz
+    evidence: "def xxe_parse(request)"
+    note: "Kimlik doğrulama yok; anonim kullanıcı DB güncelleyebilir."
+  - file: introduction/views.py
+    line: 347
+    class: missing-authz
+    evidence: "request.COOKIES.get('admin') == '1'"
+    note: "Yönetici yetkisi istemci çereziyle belirleniyor."
+  - file: introduction/views.py
+    line: 493
+    class: missing-authz
+    evidence: "def Otp(request)"
+    note: "OTP akışında kimlik doğrulama yok."
+  - file: introduction/views.py
+    line: 514
+    class: missing-authz
+    evidence: "filter(id=2, otp=otpR)"
+    note: "Herkes admin kaydının OTP'siyle admin olarak doğrulanabilir."
+  - file: introduction/views.py
+    line: 537
+    class: missing-authz
+    evidence: "XHost == 'admin.localhost:8000'"
+    note: "Yetkilendirme istemcinin belirlediği X-Host başlığına dayanıyor."
+  - file: introduction/views.py
+    line: 636
+    class: missing-authz
+    evidence: "def debug(request)"
+    note: "Debug log servis eden view'de kimlik doğrulama yok."
+  - file: introduction/views.py
+    line: 758
+    class: missing-authz
+    evidence: "request.COOKIES.get('admin') == '1'"
+    note: "Admin yetkisi istemci çerezine göre veriliyor."
+  - file: introduction/views.py
+    line: 797
+    class: missing-authz
+    evidence: "user_agent == 'pygoat_admin'"
+    note: "Admin yetkisi User-Agent başlığıyla veriliyor."
+  - file: introduction/views.py
+    line: 841
+    class: missing-authz
+    evidence: "render(... 'secret.html')"
+    note: "Admin sayfası yalnızca login kontrolü yapıyor, rol kontrolü yok."
+  - file: introduction/views.py
+    line: 1060
+    class: missing-authz
+    evidence: "cookie.split('|')[0] == 'admin'"
+    note: "Admin yetkisi imzasız çerez içeriğine göre veriliyor."
+  - file: introduction/mitre.py
+    line: 215
+    class: missing-authz
+    evidence: "def mitre_lab_25_api(request)"
+    note: "@authentication_decorator yorumda; anonim eval endpoint'i."
+  - file: introduction/mitre.py
+    line: 238
+    class: missing-authz
+    evidence: "def mitre_lab_17_api(request)"
+    note: "Komut çalıştıran API'de kimlik doğrulama yok."
+  - file: introduction/apis.py
+    line: 60
+    class: missing-authz
+    evidence: "# @authentication_decorator"
+    note: "Kimlik doğrulama dekoratörü yorumda; anonim erişim."
+  - file: introduction/apis.py
+    line: 126
+    class: missing-authz
+    evidence: "def A6_disscussion_api_2(request)"
+    note: "Sunucuda .py oluşturan endpoint'te yetki kontrolü yok."
+
+  # ---------- Oturum yapılandırması ----------
+  - file: introduction/views.py
+    line: 291
+    class: session-misconfig
+    evidence: "set_cookie('userid', ..., samesite=None, secure=False)"
+    note: "Çerez secure=False, samesite=None, httponly yok, 1 yıl geçerli."
+  - file: introduction/views.py
+    line: 305
+    class: session-misconfig
+    evidence: "set_cookie('userid', ..., secure=False)"
+    note: "Login yolunda da çerez korumasız."
+  - file: introduction/views.py
+    line: 363
+    class: session-misconfig
+    evidence: "set_cookie('admin', '1', max_age=200)"
+    note: "Yetki durumu imzasız çerezde saklanıyor."
+  - file: introduction/views.py
+    line: 1076
+    class: session-misconfig
+    evidence: "response.set_cookie('cookie', cookie)"
+    note: "Kimlik çerezi httponly/secure/samesite olmadan."
+  - file: introduction/views.py
+    line: 1109
+    class: session-misconfig
+    evidence: "set_cookie(key='auth_cookie', value=cookie)"
+    note: "Auth JWT çerezi bayraksız yazılıyor."
+  - file: introduction/views.py
+    line: 1204
+    class: session-misconfig
+    evidence: "response.set_cookie('session_id', token)"
+    note: "Oturum çerezi bayraksız yazılıyor."
+  - file: introduction/mitre.py
+    line: 171
+    class: session-misconfig
+    evidence: "response.set_cookie('auth_cookiee', cookie)"
+    note: "Auth çerezi bayraksız yazılıyor."
+
+  # ---------- CSRF ----------
+  - file: introduction/views.py
+    line: 255
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "DB güncelleyen xxe_parse CSRF muaf."
+  - file: introduction/views.py
+    line: 341
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Yetki çerezi yazan ba_lab CSRF muaf."
+  - file: introduction/views.py
+    line: 414
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Komut çalıştıran cmd_lab CSRF muaf."
+  - file: introduction/views.py
+    line: 452
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "eval çalıştıran cmd_lab2 CSRF muaf."
+  - file: introduction/views.py
+    line: 492
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "OTP view'i CSRF muaf."
+  - file: introduction/views.py
+    line: 550
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "YAML deserialize eden a9_lab CSRF muaf."
+  - file: introduction/views.py
+    line: 573
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "ImageMath.eval çağıran a9_lab2 CSRF muaf."
+  - file: introduction/views.py
+    line: 746
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Kimlik doğrulayan lab CSRF muaf."
+  - file: introduction/views.py
+    line: 782
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "a1_broken_access_lab_2 CSRF muaf."
+  - file: introduction/views.py
+    line: 854
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "SQL çalıştıran injection_sql_lab CSRF muaf."
+  - file: introduction/views.py
+    line: 1178
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Oturum açan auth_failure_lab3 CSRF muaf."
+  - file: introduction/mitre.py
+    line: 177
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Para transferi dashboard'u CSRF muaf."
+  - file: introduction/mitre.py
+    line: 191
+    class: csrf
+    evidence: "def csrf_transfer_monei_api(request, recipent, amount)"
+    note: "Para transferi GET ile, CSRF token'ı olmadan yapılıyor."
+  - file: introduction/mitre.py
+    line: 214
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "eval çalıştıran mitre_lab_25_api CSRF muaf."
+  - file: introduction/mitre.py
+    line: 237
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "nmap çalıştıran mitre_lab_17_api CSRF muaf."
+  - file: introduction/apis.py
+    line: 22
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Dosya yazıp kod çalıştıran ssrf_code_checker CSRF muaf."
+  - file: introduction/apis.py
+    line: 59
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Kaynak dosya üzerine yazan log_function_checker CSRF muaf."
+  - file: introduction/apis.py
+    line: 93
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "A7_disscussion_api CSRF muaf."
+  - file: introduction/apis.py
+    line: 112
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "A6_disscussion_api CSRF muaf."
+  - file: introduction/apis.py
+    line: 125
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "Kaynak dosya üzerine yazan A6_disscussion_api_2 CSRF muaf."
+  - file: introduction/playground/A9/api.py
+    line: 7
+    class: csrf
+    evidence: "@csrf_exempt"
+    note: "URL'e bağlı hedef endpoint CSRF muaf."
+
+  # ---------- Bilgi sızıntısı ----------
+  - file: introduction/views.py
+    line: 637
+    class: info-disclosure
+    evidence: "render(request, 'Lab/A10/debug.log')"
+    note: "Debug log dosyası HTTP üzerinden düz metin yayınlanıyor."
+  - file: introduction/views.py
+    line: 642
+    class: info-disclosure
+    evidence: "logging.basicConfig(level=logging.DEBUG, ...)"
+    note: "DEBUG seviyeli loglama; IP/kullanıcı adı dosyaya yazılıyor."
+    confidence: low
+  - file: introduction/playground/A9/api.py
+    line: 16
+    class: info-disclosure
+    evidence: "L.info(f'... username {username} and password {password}')"
+    note: "Kullanıcı parolası loga düz metin yazılıyor."
+
+  # ---------- Diğer ----------
+  - file: challenge/views.py
+    line: 49
+    class: command-injection
+    evidence: "f'docker run -d -p {port}:{chal.docker_port} {chal.docker_image}'"
+    note: "DB'den gelen değerler komut dizesine gömülüyor; argüman enjeksiyonu."
+    confidence: low
+
+  # ---------- Zafiyetli bağımlılıklar ----------
+  - file: requirements.txt
+    line: 4
+    scope: project
+    class: vulnerable-dependency
+    evidence: "certifi==2022.12.7"
+    note: "CVE-2023-37920, CVE-2024-39689."
+  - file: requirements.txt
+    line: 7
+    scope: project
+    class: vulnerable-dependency
+    evidence: "cryptography==39.0.1"
+    note: "CVE-2023-38325, CVE-2023-49083, CVE-2024-0727, CVE-2024-26130."
+  - file: requirements.txt
+    line: 11
+    scope: project
+    class: vulnerable-dependency
+    evidence: "Django==4.2"
+    note: "CVE-2023-31047, CVE-2023-36053, CVE-2024-27351."
+  - file: requirements.txt
+    line: 16
+    scope: project
+    class: vulnerable-dependency
+    evidence: "idna==3.4"
+    note: "CVE-2024-3651 — idna.encode ReDoS."
+  - file: requirements.txt
+    line: 19
+    scope: project
+    class: vulnerable-dependency
+    evidence: "Pillow==9.4.0"
+    note: "CVE-2023-44271, CVE-2023-4863, CVE-2024-28219."
+  - file: requirements.txt
+    line: 24
+    scope: project
+    class: vulnerable-dependency
+    evidence: "PyJWT==2.4.0"
+    note: "CVE-2024-53861 — issuer doğrulama atlatma."
+  - file: requirements.txt
+    line: 27
+    scope: project
+    class: vulnerable-dependency
+    evidence: "PyYAML==5.1"
+    note: "CVE-2020-1747, CVE-2020-14343 — yaml.load ile RCE."
+  - file: requirements.txt
+    line: 28
+    scope: project
+    class: vulnerable-dependency
+    evidence: "requests==2.28.2"
+    note: "CVE-2023-32681 — Proxy-Authorization sızıntısı."
+  - file: requirements.txt
+    line: 30
+    scope: project
+    class: vulnerable-dependency
+    evidence: "sqlparse==0.3.1"
+    note: "CVE-2021-32839, CVE-2023-30608, CVE-2024-4340."
+  - file: requirements.txt
+    line: 31
+    scope: project
+    class: vulnerable-dependency
+    evidence: "urllib3==1.26.9"
+    note: "CVE-2023-43804, CVE-2023-45803 — Cookie/gövde sızıntısı."
+  - file: requirements.txt
+    line: 32
+    scope: project
+    class: vulnerable-dependency
+    evidence: "Werkzeug==2.1.2"
+    note: "CVE-2023-25577, CVE-2023-46136, CVE-2024-34069."
+  - file: requirements.txt
+    line: 34
+    scope: project
+    class: vulnerable-dependency
+    evidence: "zipp==3.8.0"
+    note: "CVE-2024-5569 — sonsuz döngü DoS."
