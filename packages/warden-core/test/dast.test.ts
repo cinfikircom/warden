@@ -152,6 +152,20 @@ describe("DAST analizörleri (saf)", () => {
   it("C3: login formu olmayan admin 200 → bulgu; login varsa null", () => {
     expect(analyzeAdminExposure(probe("http://h/admin", 200, "Admin Dashboard console", "text/html"))).not.toBeNull();
     expect(analyzeAdminExposure(probe("http://h/admin", 200, "Please login with your password", "text/html"))).toBeNull();
+
+    // SPA catch-all: kök sayfayla BİREBİR aynı gövde bulgu üretmemeli.
+    // Gerçek olay (NornGuard DLP, 2026-09): <title>… Yönetim Paneli</title>
+    // taşıyan bir SPA, /admin · /administrator · /wp-admin · /manager/html
+    // yollarının dördü için de P0 (CVSS 9.1) üretiyordu — hepsi aynı sayfaydı.
+    const spa = '<!doctype html><html lang="tr"><head><title>NornGuard — Yönetim Paneli</title></head><body><div id="root"></div></body></html>';
+    expect(analyzeAdminExposure(probe("http://h/wp-admin", 200, spa, "text/html"), spa)).toBeNull();
+    // Temel verilmezse eski davranış korunur (geriye uyumlu).
+    expect(analyzeAdminExposure(probe("http://h/wp-admin", 200, spa, "text/html"))).not.toBeNull();
+    // Temel VARKEN bile gövde farklıysa bulgu üretilmeye devam etmeli —
+    // aksi hâlde düzeltme gerçek bir açık paneli körleştirirdi.
+    expect(
+      analyzeAdminExposure(probe("http://h/admin", 200, "Admin Dashboard console", "text/html"), spa),
+    ).not.toBeNull();
   });
 
   it("C4: 5+ istek 429 almazsa rate-limit bulgusu", () => {

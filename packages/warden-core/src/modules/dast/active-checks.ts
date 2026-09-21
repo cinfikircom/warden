@@ -5,9 +5,26 @@ import type { ProbeResponse } from "./client.ts";
 /** C3 yol listesi (GET ile erişilebilirlik; default-credential DENEMESİ yapılmaz). */
 export const ADMIN_PATHS = ["/admin", "/administrator", "/wp-admin", "/manager/html", "/.git/"] as const;
 
-/** C3 — korumasız admin paneli (GET 200 + login/oturum istemiyor görünüyor). */
-export function analyzeAdminExposure(res: ProbeResponse): Finding | null {
+/**
+ * C3 — korumasız admin paneli (GET 200 + login/oturum istemiyor görünüyor).
+ *
+ * `spaBaseline`: hedefin kök (`/`) yanıtının gövdesi. SPA'lar ve catch-all
+ * router'lar eşleşmeyen HER yola aynı `index.html`'i 200 ile döndürür; o
+ * durumda `/wp-admin`'in "200 dönmesi" bir panelin varlığını değil, yalnızca
+ * catch-all'ın çalıştığını gösterir.
+ *
+ * Bu, modülün C1 için zaten uyguladığı kuralın C3'e taşınmış hâli (bkz.
+ * exposed.ts, "İKİ KURAL" → her yolun bir içerik doğrulayıcısı olmalı).
+ * C3'te o doğrulayıcı yoktu ve kural yalnız kelime eşleşmesine bakıyordu:
+ * `<title>… Yönetim Paneli</title>` taşıyan bir SPA, dört ayrı yol için dört
+ * ayrı P0 (CVSS 9.1) üretiyordu — hepsi aynı sayfa.
+ */
+export function analyzeAdminExposure(res: ProbeResponse, spaBaseline?: string | null): Finding | null {
   if (res.status !== 200) return null;
+  // Gövde sitenin kendi kök sayfasıyla BİREBİR aynıysa bu bir panel değil,
+  // catch-all'ın yankısıdır. Tam eşitlik isteniyor: gevşek bir karşılaştırma
+  // (uzunluk/ön ek) gerçek bir panelin yanlışlıkla elenmesine yol açardı.
+  if (spaBaseline !== undefined && spaBaseline !== null && res.body === spaBaseline) return null;
   const b = res.body.toLowerCase();
   // 200 dönüp login formu YOKSA açık panel olabilir; login varsa zaten korumalı.
   const looksLoginGated = /password|şifre|sign in|giriş yap|login/.test(b);

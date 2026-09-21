@@ -87,11 +87,14 @@ export function makeDastModule(fetchImpl?: FetchLike): WardenModule {
           findings.push(...analyzeTls(tls, now));
         }
 
-        // C3 — korumasız admin paneli
+        // C3 — korumasız admin paneli.
+        // Kök yanıtı SPA temeli olarak geçilir: catch-all router'ın her yola
+        // döndürdüğü aynı sayfa bulgu sayılmamalı (bkz. analyzeAdminExposure).
+        const spaBaseline = root?.body ?? null;
         for (const p of ADMIN_PATHS) {
           const res = await client.get(base + p);
           if (!res) continue;
-          const f = analyzeAdminExposure(res);
+          const f = analyzeAdminExposure(res, spaBaseline);
           if (f) findings.push(f);
         }
 
